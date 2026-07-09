@@ -34,14 +34,20 @@ async function handle(request: Request) {
   if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
   const sinceIso = new Date(Date.now() - 14 * 864e5).toISOString();
-  const { data: jobs } = await admin
+  // Note: publish_queue has no campaign_id column (campaign links through
+  // content_variants -> content_items), so it is not selected here.
+  const { data: jobs, error: jobsError } = await admin
     .from("publish_queue")
-    .select("id, workspace_id, platform, published_url, campaign_id")
+    .select("id, workspace_id, platform, published_url")
     .eq("status", "published")
     .in("platform", ["facebook", "instagram"])
     .not("published_url", "is", null)
     .gte("published_at", sinceIso)
     .limit(100);
+
+  if (jobsError) {
+    return NextResponse.json({ error: jobsError.message }, { status: 500 });
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   let ingested = 0;
@@ -70,21 +76,13 @@ async function handle(request: Request) {
       clicks: insight.clicks ?? 0,
     });
 
-    // One snapshot per job per day: update if today's row exists, else insert.
-    const { data: existing } = await admin
-      .from("analytics_metrics")
-      .select("id")
-      .eq("workspace_id", job.workspace_id)
-      .eq("publish_queue_id", job.id)
-      .eq("metric_date", today)
-      .eq("source", "api")
-      .maybeSingle();
-
+    // One snapshot per job per day. Atomic upsert on the unique key
+    // (workspace_id, publish_queue_id, metric_date, source) — see migration
+    // 0014 — so overlapping runs cannot create duplicate double-counted rows.
     const row = {
       workspace_id: job.workspace_id,
       platform,
       publish_queue_id: job.id,
-      campaign_id: job.campaign_id,
       metric_date: today,
       views: unified.views,
       reach: unified.reach,
@@ -93,11 +91,9 @@ async function handle(request: Request) {
       source: "api",
     };
 
-    if (existing) {
-      await admin.from("analytics_metrics").update(row).eq("id", existing.id);
-    } else {
-      await admin.from("analytics_metrics").insert(row);
-    }
+    await admin
+      .from("analytics_metrics")
+      .upsert(row, { onConflict: "workspace_id,publish_queue_id,metric_date,source" });
     ingested++;
   }
 

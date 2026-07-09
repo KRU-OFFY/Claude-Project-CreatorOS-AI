@@ -16,10 +16,14 @@ async function handle(request: Request) {
   if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
   const nowIso = new Date().toISOString();
+  // Only auto-publish platforms the connector can post via API. Other platforms
+  // (TikTok/X/YouTube/Lemon8/Shopee) stay in manual copy-to-post mode and must
+  // not be auto-failed by the worker.
   const { data: jobs } = await admin
     .from("publish_queue")
     .select("id, workspace_id, platform, content_variant_id, retry_count, scheduled_at")
     .eq("status", "queued")
+    .in("platform", ["facebook", "instagram"])
     .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
     .order("scheduled_at", { ascending: true, nullsFirst: true })
     .limit(25);
@@ -44,10 +48,18 @@ async function handle(request: Request) {
       .eq("id", job.content_variant_id)
       .maybeSingle();
 
-    if (!variant || variant.status === "fail") {
+    // Human approval is mandatory before any publish (Brief invariant). The
+    // autonomous worker only posts variants that reached 'approved'.
+    if (!variant || variant.status !== "approved") {
       await admin
         .from("publish_queue")
-        .update({ status: "failed", error_message: "variant missing or compliance-failed" })
+        .update({
+          status: "failed",
+          error_message:
+            !variant
+              ? "variant missing"
+              : "variant not approved (human approval required before publish)",
+        })
         .eq("id", job.id);
       failed++;
       continue;

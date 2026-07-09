@@ -32,6 +32,10 @@ async function handle(request: Request) {
   for (const c of conns ?? []) {
     const current = c.access_token_encrypted ? decryptToken(c.access_token_encrypted) : null;
     if (!current) {
+      // Undecryptable ciphertext (key rotation / corruption) can never yield a
+      // usable token — this is permanent, so mark the connection 'error' so the
+      // UI/publish path stops treating it as connected.
+      await admin.from("channel_connections").update({ status: "error" }).eq("id", c.id);
       errored++;
       continue;
     }

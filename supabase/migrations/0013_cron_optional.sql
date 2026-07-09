@@ -9,9 +9,13 @@
 -- create extension if not exists pg_cron;
 -- create extension if not exists pg_net;
 --
--- -- Store config (or hardcode into the calls below):
--- -- select set_config('app.base_url', 'https://your-app.vercel.app', false);
--- -- select set_config('app.cron_secret', 'YOUR_CRON_SECRET', false);
+-- -- Store config so pg_cron WORKER sessions can read it. `set_config(..., false)`
+-- -- is session-local and will NOT be visible to the background cron workers —
+-- -- use database-level persistent settings instead (or hardcode the values in
+-- -- the scheduled command bodies below):
+-- -- alter database postgres set app.base_url = 'https://your-app.vercel.app';
+-- -- alter database postgres set app.cron_secret = 'YOUR_CRON_SECRET';
+-- -- (reconnect after ALTER DATABASE for the settings to take effect)
 --
 -- select cron.schedule(
 --   'creatoros-publish', '*/5 * * * *',

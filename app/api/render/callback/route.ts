@@ -5,9 +5,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // finishes rendering an MP4 and uploads it to Supabase Storage. The worker
 // authenticates with RENDER_WORKER_SECRET. Serverless-safe: no fs/ffmpeg here.
 export async function POST(request: Request) {
+  // The secret is mandatory: without it, an unauthenticated request could set
+  // media_url on any variant via the service-role client. Fail closed.
   const secret = process.env.RENDER_WORKER_SECRET;
   const auth = request.headers.get("authorization");
-  if (secret && auth !== `Bearer ${secret}`) {
+  if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

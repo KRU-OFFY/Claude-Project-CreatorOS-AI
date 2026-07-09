@@ -259,7 +259,8 @@ export async function enqueueVariant(formData: FormData) {
     .eq("id", variantId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
-  if (!v || v.status === "fail") return;
+  // Only human-approved variants may enter the queue (approval gate).
+  if (!v || v.status !== "approved") return;
 
   const { data: job } = await supabase
     .from("publish_queue")

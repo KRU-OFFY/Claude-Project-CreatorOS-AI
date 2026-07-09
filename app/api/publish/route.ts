@@ -37,9 +37,14 @@ export async function POST(request: Request) {
   if (!variant || variant.workspace_id !== ctx.workspaceId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  if (variant.status === "fail") {
+  if (variant.status !== "approved") {
     return NextResponse.json(
-      { error: "variant is compliance-failed and cannot be published" },
+      {
+        error:
+          variant.status === "fail"
+            ? "variant is compliance-failed and cannot be published"
+            : "variant must be human-approved before it can be queued",
+      },
       { status: 422 }
     );
   }

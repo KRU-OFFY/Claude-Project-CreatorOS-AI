@@ -36,6 +36,9 @@ export async function GET(request: Request) {
     }
 
     // Use the first managed page (a fuller UI would let the user pick).
+    // Page tokens derived from a long-lived user token do NOT expire, so store
+    // expires_at = null (default). We keep the user-token expiry in metadata for
+    // reference only — it must not drive the refresh cron.
     const page = pages[0];
     await saveMetaConnection({
       workspaceId: verified.workspaceId,
@@ -43,8 +46,7 @@ export async function GET(request: Request) {
       platform: "facebook",
       accountName: page.name,
       pageToken: page.access_token,
-      metadata: { page_id: page.id },
-      expiresAt,
+      metadata: { page_id: page.id, user_token_expires_at: expiresAt },
     });
 
     if (page.instagram_business_account?.id) {
@@ -54,8 +56,11 @@ export async function GET(request: Request) {
         platform: "instagram",
         accountName: page.name,
         pageToken: page.access_token,
-        metadata: { ig_user_id: page.instagram_business_account.id, page_id: page.id },
-        expiresAt,
+        metadata: {
+          ig_user_id: page.instagram_business_account.id,
+          page_id: page.id,
+          user_token_expires_at: expiresAt,
+        },
       });
     }
 
