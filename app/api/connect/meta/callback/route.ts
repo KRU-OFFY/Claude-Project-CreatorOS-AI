@@ -25,7 +25,9 @@ export async function GET(request: Request) {
 
   try {
     const shortToken = await exchangeCode(url.origin, code);
-    const userToken = await longLivedToken(shortToken).catch(() => shortToken);
+    const ll = await longLivedToken(shortToken).catch(() => ({ token: shortToken, expiresAt: null }));
+    const userToken = ll.token;
+    const expiresAt = ll.expiresAt;
     const pages = await listPages(userToken);
 
     if (pages.length === 0) {
@@ -42,6 +44,7 @@ export async function GET(request: Request) {
       accountName: page.name,
       pageToken: page.access_token,
       metadata: { page_id: page.id },
+      expiresAt,
     });
 
     if (page.instagram_business_account?.id) {
@@ -52,6 +55,7 @@ export async function GET(request: Request) {
         accountName: page.name,
         pageToken: page.access_token,
         metadata: { ig_user_id: page.instagram_business_account.id, page_id: page.id },
+        expiresAt,
       });
     }
 

@@ -66,15 +66,27 @@ export async function exchangeCode(origin: string, code: string): Promise<string
   return data.access_token;
 }
 
-// Upgrade to a long-lived (~60 day) user token.
-export async function longLivedToken(shortToken: string): Promise<string> {
-  const data = await graphGet<{ access_token: string }>("oauth/access_token", {
-    grant_type: "fb_exchange_token",
-    client_id: process.env.META_APP_ID ?? "",
-    client_secret: process.env.META_APP_SECRET ?? "",
-    fb_exchange_token: shortToken,
-  });
-  return data.access_token;
+export interface TokenResult {
+  token: string;
+  expiresAt: string | null; // ISO; null when the API omits expires_in
+}
+
+// Upgrade to (or refresh) a long-lived (~60 day) user token.
+export async function longLivedToken(shortOrLongToken: string): Promise<TokenResult> {
+  const data = await graphGet<{ access_token: string; expires_in?: number }>(
+    "oauth/access_token",
+    {
+      grant_type: "fb_exchange_token",
+      client_id: process.env.META_APP_ID ?? "",
+      client_secret: process.env.META_APP_SECRET ?? "",
+      fb_exchange_token: shortOrLongToken,
+    }
+  );
+  const expiresAt =
+    typeof data.expires_in === "number"
+      ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+      : null;
+  return { token: data.access_token, expiresAt };
 }
 
 export interface MetaPage {
@@ -150,6 +162,27 @@ export async function facebookPostInsights(
       impressions: pick("post_impressions"),
       reach: pick("post_impressions_unique"),
       clicks: pick("post_clicks"),
+    };
+  } catch {
+    return {};
+  }
+}
+
+// Read basic insights for a published Instagram media object.
+export async function instagramMediaInsights(
+  mediaId: string,
+  pageToken: string
+): Promise<MetaInsight> {
+  try {
+    const data = await graphGet<{ data: { name: string; values: { value: number }[] }[] }>(
+      `${mediaId}/insights`,
+      { metric: "impressions,reach,engagement", access_token: pageToken }
+    );
+    const pick = (n: string) => data.data.find((d) => d.name === n)?.values?.[0]?.value ?? 0;
+    return {
+      impressions: pick("impressions"),
+      reach: pick("reach"),
+      engagement: pick("engagement"),
     };
   } catch {
     return {};

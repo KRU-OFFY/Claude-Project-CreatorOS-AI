@@ -34,6 +34,7 @@ export async function saveMetaConnection(params: {
   accountName: string;
   pageToken: string;
   metadata: Record<string, unknown>;
+  expiresAt?: string | null;
 }): Promise<boolean> {
   const admin = createAdminClient();
   if (!admin) return false;
@@ -48,7 +49,8 @@ export async function saveMetaConnection(params: {
         access_token_encrypted: enc,
         status: "connected",
         metadata: params.metadata,
-        connected_by: params.userId,
+        connected_by: params.userId || null,
+        expires_at: params.expiresAt ?? null,
       },
       { onConflict: "workspace_id,platform,account_name" }
     );

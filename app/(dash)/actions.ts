@@ -349,37 +349,18 @@ export async function publishNow(formData: FormData) {
 
   await supabase.from("publish_queue").update({ status: "publishing" }).eq("id", jobId);
 
-  const caption =
-    (variant.variant_body as string) +
-    "\n" +
-    ((variant.hashtags as string[]) ?? []).map((h) => `#${h}`).join(" ");
-
-  const { getMetaConnection } = await import("@/lib/connections");
-  const meta = await import("@/lib/meta");
-
-  let publishedUrl: string | null = null;
-  let errorMessage: string | null = null;
-
-  try {
-    if (job.platform === "facebook") {
-      const conn = await getMetaConnection(ctx.workspaceId, "facebook");
-      if (!conn) throw new Error("ยังไม่ได้เชื่อมบัญชี Facebook");
-      const pageId = String(conn.metadata.page_id ?? "");
-      const postId = await meta.publishFacebook(pageId, conn.token, caption, variant.cta as string | null);
-      publishedUrl = `https://facebook.com/${postId}`;
-    } else if (job.platform === "instagram") {
-      const conn = await getMetaConnection(ctx.workspaceId, "instagram");
-      if (!conn) throw new Error("ยังไม่ได้เชื่อมบัญชี Instagram");
-      const igId = String(conn.metadata.ig_user_id ?? "");
-      if (!variant.media_url) throw new Error("Instagram ต้องมีรูปภาพ (media_url)");
-      const mediaId = await meta.publishInstagram(igId, conn.token, caption, variant.media_url as string);
-      publishedUrl = `https://instagram.com/p/${mediaId}`;
-    } else {
-      throw new Error("connector สำหรับแพลตฟอร์มนี้ยังไม่พร้อม (ใช้ copy-to-post)");
+  const { executePublish } = await import("@/lib/publish");
+  const outcome = await executePublish(
+    { workspace_id: ctx.workspaceId, platform: job.platform as string },
+    {
+      variant_body: variant.variant_body as string,
+      hashtags: (variant.hashtags as string[]) ?? null,
+      cta: (variant.cta as string) ?? null,
+      media_url: (variant.media_url as string) ?? null,
     }
-  } catch (e) {
-    errorMessage = e instanceof Error ? e.message : "publish failed";
-  }
+  );
+  const publishedUrl = outcome.publishedUrl ?? null;
+  const errorMessage = outcome.error ?? null;
 
   if (errorMessage) {
     await supabase

@@ -1,0 +1,38 @@
+-- 0013 — OPTIONAL: pg_cron + pg_net scheduler (alternative to Vercel Cron)
+-- Use this only if you are NOT on Vercel Pro (Hobby supports daily crons only).
+-- It calls the app's protected /api/cron/* routes from inside Postgres.
+--
+-- Everything is commented out. To enable:
+--   1. Set the two settings below to your deployed app URL + CRON_SECRET.
+--   2. Uncomment and run this migration.
+--
+-- create extension if not exists pg_cron;
+-- create extension if not exists pg_net;
+--
+-- -- Store config (or hardcode into the calls below):
+-- -- select set_config('app.base_url', 'https://your-app.vercel.app', false);
+-- -- select set_config('app.cron_secret', 'YOUR_CRON_SECRET', false);
+--
+-- select cron.schedule(
+--   'creatoros-publish', '*/5 * * * *',
+--   $$ select net.http_post(
+--        url := current_setting('app.base_url') || '/api/cron/publish',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--      ); $$
+-- );
+--
+-- select cron.schedule(
+--   'creatoros-ingest', '0 * * * *',
+--   $$ select net.http_post(
+--        url := current_setting('app.base_url') || '/api/cron/ingest',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--      ); $$
+-- );
+--
+-- select cron.schedule(
+--   'creatoros-refresh-tokens', '0 3 * * *',
+--   $$ select net.http_post(
+--        url := current_setting('app.base_url') || '/api/cron/refresh-tokens',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--      ); $$
+-- );

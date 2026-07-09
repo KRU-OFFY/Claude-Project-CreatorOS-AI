@@ -34,6 +34,14 @@ for (const r of routes) {
   }
 }
 
+// Cron routes must reject unauthenticated requests (401) — never open.
+for (const c of ["/api/cron/publish", "/api/cron/ingest", "/api/cron/refresh-tokens"]) {
+  const res = await fetch(BASE + c, { redirect: "manual" });
+  const ok = res.status === 401;
+  if (!ok) failed++;
+  console.log(`${ok ? "✓" : "✗"} ${c} (no auth) → ${res.status} (expect 401)`);
+}
+
 // Health must be a real 200 with ok:true.
 const health = await fetch(BASE + "/api/health").then((r) => r.json());
 console.log("health.ok =", health.ok, JSON.stringify(health.checks));
