@@ -40,6 +40,19 @@ async function handle(request: Request) {
   let ingested = 0;
   let processed = 0;
 
+  // Per-run cache of (workspace, platform) -> connection so we don't re-query
+  // channel_connections for every job (N+1). `null` means "checked, no
+  // connection" — still cached so we short-circuit further lookups.
+  type Conn = Awaited<ReturnType<typeof getMetaConnection>>;
+  const connCache = new Map<string, Conn>();
+  async function conn(ws: string, platform: "facebook" | "instagram"): Promise<Conn> {
+    const key = `${ws}:${platform}`;
+    if (connCache.has(key)) return connCache.get(key) ?? null;
+    const c = await getMetaConnection(ws, platform);
+    connCache.set(key, c);
+    return c;
+  }
+
   // Paginate through every published FB/IG job in the window so high-volume
   // workspaces don't undercount posts beyond the first page.
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -61,18 +74,22 @@ async function handle(request: Request) {
     if (!jobs || jobs.length === 0) break;
     processed += jobs.length;
 
+    // Collect one row per job in this page, then upsert as a batch. Turns up
+    // to `PAGE` (100) writes into one round-trip.
+    const rows: Array<Record<string, unknown>> = [];
+
     for (const job of jobs) {
       const platform = job.platform as "facebook" | "instagram";
       const nativeId = extractId(platform, job.published_url as string);
       if (!nativeId) continue;
 
-      const conn = await getMetaConnection(job.workspace_id as string, platform);
-      if (!conn) continue;
+      const c = await conn(job.workspace_id as string, platform);
+      if (!c) continue;
 
       const insight: MetaInsight =
         platform === "facebook"
-          ? await facebookPostInsights(nativeId, conn.token)
-          : await instagramMediaInsights(nativeId, conn.token);
+          ? await facebookPostInsights(nativeId, c.token)
+          : await instagramMediaInsights(nativeId, c.token);
 
       // Insights fetch failed (rate limit / downtime) → skip so we don't
       // overwrite a previously-good snapshot with zeros.
@@ -85,24 +102,27 @@ async function handle(request: Request) {
         clicks: insight.clicks ?? 0,
       });
 
+      rows.push({
+        workspace_id: job.workspace_id,
+        platform,
+        publish_queue_id: job.id,
+        metric_date: today,
+        views: unified.views,
+        reach: unified.reach,
+        engagement: unified.engagement,
+        clicks: unified.clicks,
+        source: "api",
+      });
+    }
+
+    if (rows.length > 0) {
       // One snapshot per job per day. Atomic upsert on the unique key
       // (workspace_id, publish_queue_id, metric_date, source) — see migration
       // 0014 — so overlapping runs cannot create duplicate double-counted rows.
-      await admin.from("analytics_metrics").upsert(
-        {
-          workspace_id: job.workspace_id,
-          platform,
-          publish_queue_id: job.id,
-          metric_date: today,
-          views: unified.views,
-          reach: unified.reach,
-          engagement: unified.engagement,
-          clicks: unified.clicks,
-          source: "api",
-        },
-        { onConflict: "workspace_id,publish_queue_id,metric_date,source" }
-      );
-      ingested++;
+      await admin
+        .from("analytics_metrics")
+        .upsert(rows, { onConflict: "workspace_id,publish_queue_id,metric_date,source" });
+      ingested += rows.length;
     }
 
     if (jobs.length < PAGE) break;

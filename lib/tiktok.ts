@@ -102,9 +102,11 @@ async function postJson<T>(path: string, token: string, body: unknown): Promise<
     body: JSON.stringify(body),
   });
   const json = await res.json();
-  if (!res.ok || json.error?.code === undefined || json.error?.code !== "ok") {
-    const msg = json.error?.message || `TikTok ${path} failed`;
-    if (json.error && json.error.code !== "ok") throw new Error(msg);
+  // TikTok signals success only when error.code === "ok". Anything else — an
+  // HTTP failure, a missing error object, or an error code that isn't "ok" —
+  // must throw so callers don't proceed on empty data.
+  if (!res.ok || json?.error?.code !== "ok") {
+    throw new Error(json?.error?.message || `TikTok ${path} failed (${res.status})`);
   }
   return json as T;
 }
