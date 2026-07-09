@@ -47,7 +47,9 @@ async function handle(request: Request) {
         .eq("id", c.id);
       refreshed++;
     } catch {
-      await admin.from("channel_connections").update({ status: "error" }).eq("id", c.id);
+      // Transient failure (network / Meta downtime). Leave status 'connected'
+      // so the daily cron retries before the token actually expires — do not
+      // disable a still-valid connection.
       errored++;
     }
   }

@@ -16,23 +16,23 @@
 -- select cron.schedule(
 --   'creatoros-publish', '*/5 * * * *',
 --   $$ select net.http_post(
---        url := current_setting('app.base_url') || '/api/cron/publish',
---        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--        url := current_setting('app.base_url', true) || '/api/cron/publish',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret', true))
 --      ); $$
 -- );
 --
 -- select cron.schedule(
 --   'creatoros-ingest', '0 * * * *',
 --   $$ select net.http_post(
---        url := current_setting('app.base_url') || '/api/cron/ingest',
---        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--        url := current_setting('app.base_url', true) || '/api/cron/ingest',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret', true))
 --      ); $$
 -- );
 --
 -- select cron.schedule(
 --   'creatoros-refresh-tokens', '0 3 * * *',
 --   $$ select net.http_post(
---        url := current_setting('app.base_url') || '/api/cron/refresh-tokens',
---        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret'))
+--        url := current_setting('app.base_url', true) || '/api/cron/refresh-tokens',
+--        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.cron_secret', true))
 --      ); $$
 -- );

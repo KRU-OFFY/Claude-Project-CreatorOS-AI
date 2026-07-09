@@ -8,10 +8,19 @@ import type { PlatformKey } from "@/lib/platforms";
 
 export const dynamic = "force-dynamic";
 
-// Pull the platform-native id from a stored published_url.
+// Pull the platform-native id from a stored published_url. Strips any query
+// string / trailing slash so the id stays valid for the Graph API call.
 function extractId(platform: string, url: string): string | null {
-  if (platform === "facebook") return url.split("facebook.com/")[1] ?? null;
-  if (platform === "instagram") return url.split("/p/")[1] ?? null;
+  if (!url) return null;
+  const clean = url.split("?")[0].split("#")[0];
+  if (platform === "facebook") {
+    const rest = clean.split("facebook.com/")[1];
+    return rest ? rest.replace(/\/+$/, "") || null : null;
+  }
+  if (platform === "instagram") {
+    const rest = clean.split("/p/")[1];
+    return rest ? rest.replace(/\/+$/, "") || null : null;
+  }
   return null;
 }
 
@@ -49,6 +58,10 @@ async function handle(request: Request) {
       platform === "facebook"
         ? await facebookPostInsights(nativeId, conn.token)
         : await instagramMediaInsights(nativeId, conn.token);
+
+    // Insights fetch failed (rate limit / downtime) → skip so we don't
+    // overwrite a previously-good snapshot with zeros.
+    if (Object.keys(insight).length === 0) continue;
 
     const unified = normalize(platform as PlatformKey, {
       views: insight.impressions ?? 0,

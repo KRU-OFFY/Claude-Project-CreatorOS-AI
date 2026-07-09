@@ -28,8 +28,15 @@ async function handle(request: Request) {
   let failed = 0;
 
   for (const job of jobs ?? []) {
-    // Claim the job to reduce double-processing on overlapping runs.
-    await admin.from("publish_queue").update({ status: "publishing" }).eq("id", job.id);
+    // Atomically claim the job (only if still queued) to prevent overlapping
+    // cron runs or a concurrent manual publish from double-posting.
+    const { data: claimed } = await admin
+      .from("publish_queue")
+      .update({ status: "publishing" })
+      .eq("id", job.id)
+      .eq("status", "queued")
+      .select("id");
+    if (!claimed || claimed.length === 0) continue;
 
     const { data: variant } = await admin
       .from("content_variants")

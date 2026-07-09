@@ -347,7 +347,15 @@ export async function publishNow(formData: FormData) {
     .maybeSingle();
   if (!variant || variant.status === "fail") return;
 
-  await supabase.from("publish_queue").update({ status: "publishing" }).eq("id", jobId);
+  // Atomically claim the job (only if still queued) so a double-click or a
+  // concurrent cron run cannot publish the same job twice.
+  const { data: claimed } = await supabase
+    .from("publish_queue")
+    .update({ status: "publishing" })
+    .eq("id", jobId)
+    .in("status", ["queued", "retry"])
+    .select("id");
+  if (!claimed || claimed.length === 0) return;
 
   const { executePublish } = await import("@/lib/publish");
   const outcome = await executePublish(

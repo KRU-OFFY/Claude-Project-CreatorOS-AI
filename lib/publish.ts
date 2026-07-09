@@ -26,10 +26,8 @@ export async function executePublish(
   job: PublishJob,
   variant: PublishVariant
 ): Promise<PublishOutcome> {
-  const caption =
-    variant.variant_body +
-    "\n" +
-    (variant.hashtags ?? []).map((h) => `#${h}`).join(" ");
+  const hashtagStr = (variant.hashtags ?? []).map((h) => `#${h}`).join(" ");
+  const caption = hashtagStr ? `${variant.variant_body}\n${hashtagStr}` : variant.variant_body;
 
   try {
     if (job.platform === "facebook") {
