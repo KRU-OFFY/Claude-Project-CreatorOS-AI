@@ -1,6 +1,6 @@
 import { PageHeader, Card, StatusBadge, EmptyState, Th, Td } from "@/components/ui";
 import { listApprovedVariants, listPublishJobs } from "@/lib/data";
-import { enqueueVariant, markPublished, retryJob } from "../actions";
+import { enqueueVariant, markPublished, retryJob, publishNow } from "../actions";
 import { getAdapter } from "@/lib/adapters";
 import { platformLabel, type PlatformKey } from "@/lib/platforms";
 
@@ -87,7 +87,16 @@ export default async function PublishCenterPage() {
                     </Td>
                     <Td>{j.retry_count}</Td>
                     <Td>
-                      <div className="flex gap-1.5">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(j.status === "queued" || j.status === "publishing" || j.status === "retry") &&
+                          (j.platform === "facebook" || j.platform === "instagram") && (
+                            <form action={publishNow}>
+                              <input type="hidden" name="job_id" value={j.id} />
+                              <button className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white">
+                                โพสต์เลย (API)
+                              </button>
+                            </form>
+                          )}
                         {(j.status === "queued" || j.status === "publishing") && (
                           <form action={markPublished} className="flex items-center gap-1">
                             <input type="hidden" name="job_id" value={j.id} />

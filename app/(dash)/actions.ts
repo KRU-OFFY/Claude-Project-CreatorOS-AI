@@ -324,6 +324,92 @@ export async function retryJob(formData: FormData) {
   revalidatePath("/publish-center");
 }
 
+// Publish a queued job for real via the platform connector (Meta FB/IG).
+// Verifies ownership, calls the Graph API with the workspace's stored token,
+// updates status + published_url, and records insights + an audit log.
+export async function publishNow(formData: FormData) {
+  const { supabase, ctx } = await ctxAndClient();
+  const jobId = String(formData.get("job_id") ?? "");
+
+  const { data: job } = await supabase
+    .from("publish_queue")
+    .select("id, platform, content_variant_id, retry_count")
+    .eq("id", jobId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!job) return;
+
+  const { data: variant } = await supabase
+    .from("content_variants")
+    .select("variant_body, hashtags, cta, media_url, status")
+    .eq("id", job.content_variant_id)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!variant || variant.status === "fail") return;
+
+  await supabase.from("publish_queue").update({ status: "publishing" }).eq("id", jobId);
+
+  const caption =
+    (variant.variant_body as string) +
+    "\n" +
+    ((variant.hashtags as string[]) ?? []).map((h) => `#${h}`).join(" ");
+
+  const { getMetaConnection } = await import("@/lib/connections");
+  const meta = await import("@/lib/meta");
+
+  let publishedUrl: string | null = null;
+  let errorMessage: string | null = null;
+
+  try {
+    if (job.platform === "facebook") {
+      const conn = await getMetaConnection(ctx.workspaceId, "facebook");
+      if (!conn) throw new Error("ยังไม่ได้เชื่อมบัญชี Facebook");
+      const pageId = String(conn.metadata.page_id ?? "");
+      const postId = await meta.publishFacebook(pageId, conn.token, caption, variant.cta as string | null);
+      publishedUrl = `https://facebook.com/${postId}`;
+    } else if (job.platform === "instagram") {
+      const conn = await getMetaConnection(ctx.workspaceId, "instagram");
+      if (!conn) throw new Error("ยังไม่ได้เชื่อมบัญชี Instagram");
+      const igId = String(conn.metadata.ig_user_id ?? "");
+      if (!variant.media_url) throw new Error("Instagram ต้องมีรูปภาพ (media_url)");
+      const mediaId = await meta.publishInstagram(igId, conn.token, caption, variant.media_url as string);
+      publishedUrl = `https://instagram.com/p/${mediaId}`;
+    } else {
+      throw new Error("connector สำหรับแพลตฟอร์มนี้ยังไม่พร้อม (ใช้ copy-to-post)");
+    }
+  } catch (e) {
+    errorMessage = e instanceof Error ? e.message : "publish failed";
+  }
+
+  if (errorMessage) {
+    await supabase
+      .from("publish_queue")
+      .update({ status: "failed", error_message: errorMessage, retry_count: (job.retry_count ?? 0) })
+      .eq("id", jobId);
+  } else {
+    await supabase
+      .from("publish_queue")
+      .update({
+        status: "published",
+        published_url: publishedUrl,
+        published_at: new Date().toISOString(),
+        error_message: null,
+      })
+      .eq("id", jobId);
+  }
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: errorMessage ? "publish.failed" : "publish.published",
+    entityType: "publish_queue",
+    entityId: jobId,
+    metadata: { platform: job.platform, via: "api", error: errorMessage },
+  });
+  revalidatePath("/publish-center");
+  revalidatePath("/calendar");
+}
+
 // Manual analytics entry (until real connectors are wired).
 export async function recordMetrics(formData: FormData) {
   const { supabase, ctx } = await ctxAndClient();
