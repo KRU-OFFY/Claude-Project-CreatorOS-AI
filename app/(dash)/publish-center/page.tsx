@@ -89,7 +89,9 @@ export default async function PublishCenterPage() {
                     <Td>
                       <div className="flex flex-wrap gap-1.5">
                         {(j.status === "queued" || j.status === "publishing" || j.status === "retry") &&
-                          (j.platform === "facebook" || j.platform === "instagram") && (
+                          (j.platform === "facebook" ||
+                            j.platform === "instagram" ||
+                            j.platform === "tiktok") && (
                             <form action={publishNow}>
                               <input type="hidden" name="job_id" value={j.id} />
                               <button className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white">

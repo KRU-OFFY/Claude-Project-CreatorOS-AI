@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { PLATFORM_KEYS } from "@/lib/platforms";
 
 // Inbound webhooks from social platforms (publish status callbacks, metric
-// pushes). Serverless-safe: no filesystem/ffmpeg. Signature verification per
+// pushes). Serverless-safe: no filesystem or media transcoding. Signature per
 // platform is a future connector concern; this validates the platform slug and
 // acknowledges receipt so providers don't retry indefinitely.
 export async function POST(

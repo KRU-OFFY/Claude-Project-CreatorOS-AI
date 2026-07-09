@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron } from "@/lib/cron";
 import { executePublish } from "@/lib/publish";
-import { getMetaConnection } from "@/lib/connections";
+import { getConnection } from "@/lib/connections";
 import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -17,14 +17,14 @@ async function handle(request: Request) {
   if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
   const nowIso = new Date().toISOString();
-  // Only auto-publish platforms the connector can post via API. Other platforms
-  // (TikTok/X/YouTube/Lemon8/Shopee) stay in manual copy-to-post mode and must
-  // not be auto-failed by the worker.
+  // Only auto-publish platforms the connector can post via API. Others
+  // (X/YouTube/Lemon8/Shopee) stay in manual copy-to-post mode and must not be
+  // auto-failed by the worker.
   const { data: jobs } = await admin
     .from("publish_queue")
     .select("id, workspace_id, platform, content_variant_id, retry_count, scheduled_at")
     .eq("status", "queued")
-    .in("platform", ["facebook", "instagram"])
+    .in("platform", ["facebook", "instagram", "tiktok"])
     .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
     .order("scheduled_at", { ascending: true, nullsFirst: true })
     .limit(25);
@@ -37,9 +37,9 @@ async function handle(request: Request) {
   for (const job of jobs ?? []) {
     // Skip jobs whose workspace has no connected account for this platform:
     // those are manual copy-to-post and must stay queued, not be auto-failed.
-    const conn = await getMetaConnection(
+    const conn = await getConnection(
       job.workspace_id as string,
-      job.platform as "facebook" | "instagram"
+      job.platform as string
     );
     if (!conn) {
       skipped++;

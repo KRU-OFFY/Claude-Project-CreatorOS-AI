@@ -63,10 +63,10 @@ export interface DecryptedConnection {
   metadata: Record<string, unknown>;
 }
 
-// Load + decrypt a workspace's connection for a platform (server-only).
-export async function getMetaConnection(
+// Load + decrypt a workspace's connected account for any platform (server-only).
+export async function getConnection(
   workspaceId: string,
-  platform: "facebook" | "instagram"
+  platform: string
 ): Promise<DecryptedConnection | null> {
   const admin = createAdminClient();
   if (!admin) return null;
@@ -86,4 +86,33 @@ export async function getMetaConnection(
     token,
     metadata: (data.metadata as Record<string, unknown>) ?? {},
   };
+}
+
+// Back-compat wrapper for the Meta call sites.
+export function getMetaConnection(
+  workspaceId: string,
+  platform: "facebook" | "instagram"
+): Promise<DecryptedConnection | null> {
+  return getConnection(workspaceId, platform);
+}
+
+// Generic connection writer for any platform (encrypts the token).
+export async function saveConnection(params: {
+  workspaceId: string;
+  userId: string;
+  platform: string;
+  accountName: string;
+  token: string;
+  metadata: Record<string, unknown>;
+  expiresAt?: string | null;
+}): Promise<boolean> {
+  return saveMetaConnection({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+    platform: params.platform as "facebook" | "instagram",
+    accountName: params.accountName,
+    pageToken: params.token,
+    metadata: params.metadata,
+    expiresAt: params.expiresAt ?? null,
+  });
 }

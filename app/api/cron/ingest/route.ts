@@ -108,7 +108,7 @@ async function handle(request: Request) {
     if (jobs.length < PAGE) break;
   }
 
-  return NextResponse.json({ ok: true, jobs: jobs?.length ?? 0, ingested });
+  return NextResponse.json({ ok: true, jobs: processed, ingested });
 }
 
 export const GET = handle;

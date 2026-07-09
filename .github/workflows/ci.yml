@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Serverless-safe guard (no fs/ffmpeg in app/api)
+        run: |
+          if grep -rnE "\b(fs\.|from ['\"]fs['\"]|require\(['\"]fs['\"]\)|ffmpeg|child_process)" app/api; then
+            echo "::error::filesystem/ffmpeg usage found in app/api (must run in an external worker)"
+            exit 1
+          fi
+          echo "OK — no fs/ffmpeg in app/api"

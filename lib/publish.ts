@@ -1,7 +1,8 @@
 import "server-only";
 
-import { getMetaConnection } from "@/lib/connections";
+import { getMetaConnection, getConnection } from "@/lib/connections";
 import { publishFacebook, publishInstagram } from "@/lib/meta";
+import { publishVideo as publishTikTokVideo } from "@/lib/tiktok";
 
 export interface PublishJob {
   workspace_id: string;
@@ -44,6 +45,13 @@ export async function executePublish(
       if (!variant.media_url) return { error: "Instagram ต้องมีรูปภาพ (media_url)" };
       const mediaId = await publishInstagram(igId, conn.token, caption, variant.media_url);
       return { publishedUrl: `https://instagram.com/p/${mediaId}` };
+    }
+    if (job.platform === "tiktok") {
+      const conn = await getConnection(job.workspace_id, "tiktok");
+      if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี TikTok" };
+      if (!variant.media_url) return { error: "TikTok ต้องมีวิดีโอ (media_url)" };
+      const publishId = await publishTikTokVideo(conn.token, caption, variant.media_url);
+      return { publishedUrl: `tiktok:publish/${publishId}` };
     }
     return { error: "connector สำหรับแพลตฟอร์มนี้ยังไม่พร้อม (ใช้ copy-to-post)" };
   } catch (e) {
