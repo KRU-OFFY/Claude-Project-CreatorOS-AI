@@ -83,6 +83,20 @@ BASE_URL=http://localhost:3000 node scripts/smoke.mjs
    แล้วชี้ `RENDER_WORKER_URL` มาที่มัน — worker เขียนผลลง Supabase Storage และ callback
    `/api/render/callback`
 
+## Automation (Cron)
+
+Core loop ทำงานเองผ่าน `/api/cron/*` (ป้องกันด้วย `CRON_SECRET` — `Authorization: Bearer`):
+
+| Route | หน้าที่ | ตารางเวลา (แนะนำ) |
+|---|---|---|
+| `/api/cron/publish` | ยิงงานใน `publish_queue` ที่ถึงเวลา (`scheduled_at <= now`) ผ่าน connector | ทุก 5 นาที |
+| `/api/cron/ingest` | ดึง insights ของโพสต์ Meta ที่เผยแพร่แล้ว → เขียน `analytics_metrics` | รายชั่วโมง |
+| `/api/cron/refresh-tokens` | ต่ออายุ Meta token ที่ใกล้หมด | รายวัน |
+
+ตั้งเวลาไว้ใน `vercel.json` (Vercel Cron). **หมายเหตุ:** Vercel Hobby รองรับ cron รายวันเท่านั้น —
+sub-daily (ทุก 5 นาที) ต้องใช้ **Vercel Pro**. ถ้าไม่ใช้ Pro ให้เปิด `supabase/migrations/0013_cron_optional.sql`
+(pg_cron + pg_net เรียก route เดียวกันจากใน Postgres) แทน
+
 ## Connector Roadmap
 
 รอบนี้ Platform Adapter Layer เป็น interface เดียว + stub (โหมด copy-to-post เมื่อไม่มี credentials).

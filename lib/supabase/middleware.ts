@@ -2,9 +2,12 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { env, isSupabaseConfigured } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login", "/setup", "/api/health"];
+const PUBLIC_PATHS = ["/login", "/setup"];
 
 function isPublicPath(pathname: string): boolean {
+  // API routes self-authorize (session check, CRON_SECRET, webhook signature,
+  // OAuth state) and must not be redirected to the HTML login page.
+  if (pathname.startsWith("/api/")) return true;
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 

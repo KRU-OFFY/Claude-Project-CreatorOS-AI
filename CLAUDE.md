@@ -39,6 +39,12 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - `npm run typecheck` · `npm run build` · `npm run dev`
 - Smoke: `npm run start &` then `BASE_URL=http://localhost:3000 node scripts/smoke.mjs`
 
+## Automation (cron)
+- `/api/cron/{publish,ingest,refresh-tokens}` — protected by `CRON_SECRET` (`authorizeCron` in `lib/cron.ts`); scheduled in `vercel.json`.
+- Publish core is shared: `lib/publish.ts::executePublish` is called by both the `publishNow` action and the publish cron. Cron uses the service-role admin client and scopes by `job.workspace_id`.
+- `lib/meta.ts` insights (`facebookPostInsights` / `instagramMediaInsights`) feed `analytics_metrics` (source=`api`) via the ingest cron.
+
 ## Migrations
-`supabase/migrations/0001…0010`. Every business table has `workspace_id` + RLS via
-`is_workspace_member()`. Roles: owner/editor/approver/viewer.
+`supabase/migrations/0001…0013`. Every business table has `workspace_id` + RLS via
+`is_workspace_member()`. Roles: owner/editor/approver/viewer. `0013` is an optional
+pg_cron alternative to Vercel Cron (commented out).
