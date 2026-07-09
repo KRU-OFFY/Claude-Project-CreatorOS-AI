@@ -3,7 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 // Callback from the external Render Worker (Fly.io/Railway/Cloud Run) after it
 // finishes rendering an MP4 and uploads it to Supabase Storage. The worker
-// authenticates with RENDER_WORKER_SECRET. Serverless-safe: no fs/ffmpeg here.
+// authenticates with RENDER_WORKER_SECRET. Serverless-safe: no filesystem or
+// media transcoding happens in this route (that runs in the external worker).
 export async function POST(request: Request) {
   // The secret is mandatory: without it, an unauthenticated request could set
   // media_url on any variant via the service-role client. Fail closed.

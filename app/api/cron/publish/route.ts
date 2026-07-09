@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron } from "@/lib/cron";
 import { executePublish } from "@/lib/publish";
+import { getConnection } from "@/lib/connections";
 import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +17,42 @@ async function handle(request: Request) {
   if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
   const nowIso = new Date().toISOString();
-  // Only auto-publish platforms the connector can post via API. Other platforms
-  // (TikTok/X/YouTube/Lemon8/Shopee) stay in manual copy-to-post mode and must
-  // not be auto-failed by the worker.
+  // Only auto-publish platforms the connector can post via API. Others
+  // (X/YouTube/Lemon8/Shopee) stay in manual copy-to-post mode and must not be
+  // auto-failed by the worker.
+  //
+  // Pre-load the set of (workspace, platform) pairs that actually have a
+  // connected account, then hand the DB an IN-list — jobs without a connection
+  // are never returned. Without this, a manual copy-to-post job with a past
+  // scheduled_at would occupy the .limit(25) window on every tick and starve
+  // other workspaces (Head-of-Line blocking).
+  const { data: conns } = await admin
+    .from("channel_connections")
+    .select("workspace_id, platform")
+    .eq("status", "connected")
+    .in("platform", ["facebook", "instagram", "tiktok"]);
+
+  const wsSet: Record<string, Set<string>> = {};
+  for (const c of conns ?? []) {
+    const p = c.platform as string;
+    (wsSet[p] ??= new Set<string>()).add(c.workspace_id as string);
+  }
+
+  const publishablePlatforms = Object.keys(wsSet);
+  if (publishablePlatforms.length === 0) {
+    return NextResponse.json({ ok: true, processed: 0, published: 0, failed: 0 });
+  }
+
+  // Build one OR clause: (platform=fb AND workspace_id IN (…)) OR (platform=ig …)
+  const platformScope = publishablePlatforms
+    .map((p) => `and(platform.eq.${p},workspace_id.in.(${Array.from(wsSet[p]).join(",")}))`)
+    .join(",");
+
   const { data: jobs } = await admin
     .from("publish_queue")
     .select("id, workspace_id, platform, content_variant_id, retry_count, scheduled_at")
     .eq("status", "queued")
-    .in("platform", ["facebook", "instagram"])
+    .or(platformScope)
     .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
     .order("scheduled_at", { ascending: true, nullsFirst: true })
     .limit(25);
@@ -32,6 +61,15 @@ async function handle(request: Request) {
   let failed = 0;
 
   for (const job of jobs ?? []) {
+    // Re-check the connection at claim time (it could have been disconnected
+    // between the pre-load and now). Skip is safe because the query already
+    // filtered on connected workspaces — this is a race-window belt-and-braces.
+    const conn = await getConnection(
+      job.workspace_id as string,
+      job.platform as string
+    );
+    if (!conn) continue;
+
     // Atomically claim the job (only if still queued) to prevent overlapping
     // cron runs or a concurrent manual publish from double-posting.
     const { data: claimed } = await admin
@@ -42,10 +80,13 @@ async function handle(request: Request) {
       .select("id");
     if (!claimed || claimed.length === 0) continue;
 
+    // Scope the variant fetch to the job's workspace so a crafted queue row
+    // cannot pair a job with a variant from another workspace.
     const { data: variant } = await admin
       .from("content_variants")
       .select("variant_body, hashtags, cta, media_url, status")
       .eq("id", job.content_variant_id)
+      .eq("workspace_id", job.workspace_id)
       .maybeSingle();
 
     // Human approval is mandatory before any publish (Brief invariant). The
@@ -107,7 +148,12 @@ async function handle(request: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, processed: jobs?.length ?? 0, published, failed });
+  return NextResponse.json({
+    ok: true,
+    processed: jobs?.length ?? 0,
+    published,
+    failed,
+  });
 }
 
 export const GET = handle;

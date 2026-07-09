@@ -51,9 +51,14 @@ async function handle(request: Request) {
         .eq("id", c.id);
       refreshed++;
     } catch {
-      // Transient failure (network / Meta downtime). Leave status 'connected'
-      // so the daily cron retries before the token actually expires — do not
-      // disable a still-valid connection.
+      // If the token is already past expiry, a failed refresh is terminal —
+      // mark it 'error' so the UI/publish path stops using a dead token. If it
+      // hasn't expired yet, treat the failure as transient and leave it
+      // 'connected' to retry on the next run.
+      const expired = c.expires_at ? new Date(c.expires_at as string) <= new Date() : false;
+      if (expired) {
+        await admin.from("channel_connections").update({ status: "error" }).eq("id", c.id);
+      }
       errored++;
     }
   }

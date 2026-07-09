@@ -219,9 +219,13 @@ export async function rewriteVariant(formData: FormData) {
   revalidatePath("/compliance");
 }
 
-// Human approval — only writers can approve; sets variant to approved.
+// Human approval — only owner/approver roles may approve; sets variant approved.
 export async function approveVariant(formData: FormData) {
   const { supabase, ctx } = await ctxAndClient();
+  const { canApprove } = await import("@/lib/roles");
+  if (!canApprove(ctx.role)) {
+    throw new Error("เฉพาะบทบาท owner หรือ approver เท่านั้นที่อนุมัติ Compliance ได้");
+  }
   const variantId = String(formData.get("variant_id") ?? "");
   const { data: v } = await supabase
     .from("content_variants")

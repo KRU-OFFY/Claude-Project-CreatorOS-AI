@@ -89,7 +89,9 @@ export default async function PublishCenterPage() {
                     <Td>
                       <div className="flex flex-wrap gap-1.5">
                         {(j.status === "queued" || j.status === "publishing" || j.status === "retry") &&
-                          (j.platform === "facebook" || j.platform === "instagram") && (
+                          (j.platform === "facebook" ||
+                            j.platform === "instagram" ||
+                            j.platform === "tiktok") && (
                             <form action={publishNow}>
                               <input type="hidden" name="job_id" value={j.id} />
                               <button className="rounded bg-brand px-2 py-1 text-xs font-semibold text-white">
@@ -110,11 +112,13 @@ export default async function PublishCenterPage() {
                             </button>
                           </form>
                         )}
-                        {(j.status === "failed" || j.status === "retry") && (
+                        {(j.status === "failed" ||
+                          j.status === "retry" ||
+                          j.status === "publishing") && (
                           <form action={retryJob}>
                             <input type="hidden" name="job_id" value={j.id} />
                             <button className="rounded border border-black/15 px-2 py-1 text-xs">
-                              retry
+                              {j.status === "publishing" ? "รีเซ็ต (ค้าง)" : "retry"}
                             </button>
                           </form>
                         )}

@@ -1,6 +1,8 @@
 import { PageHeader, Card, StatusBadge, EmptyState } from "@/components/ui";
 import { listComplianceItems } from "@/lib/data";
 import { rewriteVariant, approveVariant } from "../actions";
+import { canApprove } from "@/lib/roles";
+import { getActiveContext } from "@/lib/workspace";
 import { platformLabel } from "@/lib/platforms";
 
 type Check = {
@@ -13,7 +15,8 @@ type Check = {
 };
 
 export default async function CompliancePage() {
-  const items = await listComplianceItems();
+  const [items, ctx] = await Promise.all([listComplianceItems(), getActiveContext()]);
+  const mayApprove = canApprove(ctx?.role ?? "viewer");
 
   return (
     <div>
@@ -51,13 +54,18 @@ export default async function CompliancePage() {
                         </button>
                       </form>
                     )}
-                    {v.status !== "fail" && v.status !== "approved" && (
+                    {v.status !== "fail" && v.status !== "approved" && mayApprove && (
                       <form action={approveVariant}>
                         <input type="hidden" name="variant_id" value={v.id} />
                         <button className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">
                           ✓ อนุมัติ
                         </button>
                       </form>
+                    )}
+                    {v.status !== "fail" && v.status !== "approved" && !mayApprove && (
+                      <span className="text-xs text-black/40">
+                        ต้องให้ owner/approver อนุมัติ
+                      </span>
                     )}
                   </div>
                 </div>
