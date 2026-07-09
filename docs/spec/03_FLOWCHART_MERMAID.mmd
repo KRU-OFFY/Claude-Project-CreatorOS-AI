@@ -1,0 +1,39 @@
+flowchart TD
+    A([Login / Demo Mode]) --> B[Command Center]
+    B --> C[Product Discovery]
+    C --> D[Product Scoring]
+    D --> E{Score ผ่านเกณฑ์?}
+    E -- ไม่ผ่าน --> F[Watchlist / Retest Later]
+    F --> C
+    E -- ผ่าน --> G[Campaign Setup]
+    G --> H[AI Brief Generator]
+    H --> I[AI Script + Caption Generator]
+    I --> J[Compliance Gate]
+    J --> K{ผ่าน Compliance?}
+    K -- ไม่ผ่าน --> L[AI Rewrite / Risk Fix]
+    L --> J
+    K -- ผ่าน --> M[Generate Platform Content Variants]
+    M --> N[Select Promotion Channels]
+    N --> O[Facebook]
+    N --> P[Instagram]
+    N --> Q[TikTok]
+    N --> R[X]
+    N --> S[YouTube]
+    N --> T[Lemon8]
+    N --> U[Shopee Video]
+    N --> V[Shopee Live]
+    O --> W[Unified Content Calendar]
+    P --> W
+    Q --> W
+    R --> W
+    S --> W
+    T --> W
+    U --> W
+    V --> W
+    W --> X[Publishing Queue]
+    X --> Y[Human Approval]
+    Y --> Z[Publish / Manual Copy-to-Post]
+    Z --> AA[Analytics Collector]
+    AA --> AB[Revenue Forecast]
+    AB --> AC[AI Optimization Loop]
+    AC --> B
