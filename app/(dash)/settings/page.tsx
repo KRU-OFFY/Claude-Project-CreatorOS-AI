@@ -4,13 +4,28 @@ import { getActiveContext } from "@/lib/workspace";
 import { PLATFORMS, PLATFORM_KEYS } from "@/lib/platforms";
 import { getAdapter } from "@/lib/adapters";
 
-export default async function SettingsPage() {
-  const [connections, ctx] = await Promise.all([
+const metaBanners: Record<string, { text: string; ok: boolean }> = {
+  connected: { text: "เชื่อมบัญชี Meta (Facebook/Instagram) สำเร็จ", ok: true },
+  cancelled: { text: "ยกเลิกการเชื่อมบัญชี Meta", ok: false },
+  no_pages: { text: "ไม่พบเพจที่จัดการได้ในบัญชีนี้", ok: false },
+  bad_state: { text: "state ไม่ถูกต้อง กรุณาลองใหม่", ok: false },
+  not_configured: { text: "ยังไม่ได้ตั้งค่า META_APP_ID/SECRET บนเซิร์ฟเวอร์", ok: false },
+  error: { text: "เกิดข้อผิดพลาดระหว่างเชื่อมบัญชี", ok: false },
+};
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ meta?: string; msg?: string }>;
+}) {
+  const [connections, ctx, sp] = await Promise.all([
     listChannelConnections(),
     getActiveContext(),
+    searchParams,
   ]);
 
   const byPlatform = new Map(connections.map((c) => [c.platform, c]));
+  const banner = sp.meta ? metaBanners[sp.meta] : null;
 
   return (
     <div>
@@ -18,6 +33,43 @@ export default async function SettingsPage() {
         title="ตั้งค่า"
         subtitle="เชื่อมบัญชีแพลตฟอร์ม · บทบาทผู้ใช้ · การตั้งค่าเวิร์กสเปซ"
       />
+
+      {banner && (
+        <div
+          className={`mb-4 rounded-lg px-4 py-2 text-sm ${
+            banner.ok ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {banner.text}
+          {sp.msg && <span className="ml-2 text-xs opacity-70">({decodeURIComponent(sp.msg)})</span>}
+        </div>
+      )}
+
+      <div className="mb-4">
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">เชื่อมบัญชี Meta (Facebook / Instagram)</h2>
+              <p className="mt-1 text-xs text-black/50">
+                เชื่อมเพจเพื่อโพสต์จริงผ่าน Graph API — token จะถูกเข้ารหัสและเก็บฝั่ง server
+                {byPlatform.get("facebook")?.status === "connected" && (
+                  <span className="ml-1 text-green-600">
+                    (เชื่อมแล้ว: {byPlatform.get("facebook")?.account_name})
+                  </span>
+                )}
+              </p>
+            </div>
+            <a
+              href="/api/connect/meta/start"
+              className="rounded-lg bg-gradient-to-r from-brand to-brand-2 px-4 py-2 text-sm font-semibold text-white"
+            >
+              {byPlatform.get("facebook")?.status === "connected"
+                ? "เชื่อมใหม่ / เปลี่ยนเพจ"
+                : "เชื่อมบัญชี Meta"}
+            </a>
+          </div>
+        </Card>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
