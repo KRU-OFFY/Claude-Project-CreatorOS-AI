@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
-import { exchangeCode, creatorInfo } from "@/lib/tiktok";
+import { exchangeCode, creatorInfo, hasPublishScope } from "@/lib/tiktok";
 import { verifyState, saveConnection } from "@/lib/connections";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { encryptToken } from "@/lib/tokens";
 import { logAudit } from "@/lib/audit";
 
 // Handles the TikTok OAuth redirect: exchanges the code and stores the encrypted
-// access token (+ encrypted refresh token in metadata) for the workspace.
+// access + refresh tokens for the workspace.
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -26,6 +25,15 @@ export async function GET(request: Request) {
 
   try {
     const tok = await exchangeCode(url.origin, code);
+
+    // TikTok's consent screen lets users deny individual scopes. Without
+    // `video.publish` the connection is unusable for posting — refuse to save
+    // it so the UI can surface the problem instead of failing at publish time.
+    if (!hasPublishScope(tok.scope)) {
+      settings.searchParams.set("tiktok", "missing_scope");
+      return NextResponse.redirect(settings);
+    }
+
     const info = await creatorInfo(tok.token);
 
     await saveConnection({
@@ -34,10 +42,13 @@ export async function GET(request: Request) {
       platform: "tiktok",
       accountName: info?.nickname || "TikTok",
       token: tok.token,
-      // Refresh token is a secret too — store it encrypted, not in plaintext.
+      // Encrypted refresh token goes to its own column (not `metadata`, which
+      // RLS grants clients `select` on).
+      refreshToken: tok.refreshToken,
       metadata: {
         open_id: tok.openId,
-        refresh_token_encrypted: tok.refreshToken ? encryptToken(tok.refreshToken) : null,
+        privacy_level_options: info?.privacyLevelOptions ?? [],
+        scope: tok.scope,
       },
       expiresAt: tok.expiresAt,
     });
