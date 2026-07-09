@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron } from "@/lib/cron";
 import { executePublish } from "@/lib/publish";
+import { getMetaConnection } from "@/lib/connections";
 import { logAudit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,20 @@ async function handle(request: Request) {
   let published = 0;
   let failed = 0;
 
+  let skipped = 0;
+
   for (const job of jobs ?? []) {
+    // Skip jobs whose workspace has no connected account for this platform:
+    // those are manual copy-to-post and must stay queued, not be auto-failed.
+    const conn = await getMetaConnection(
+      job.workspace_id as string,
+      job.platform as "facebook" | "instagram"
+    );
+    if (!conn) {
+      skipped++;
+      continue;
+    }
+
     // Atomically claim the job (only if still queued) to prevent overlapping
     // cron runs or a concurrent manual publish from double-posting.
     const { data: claimed } = await admin
@@ -42,10 +56,13 @@ async function handle(request: Request) {
       .select("id");
     if (!claimed || claimed.length === 0) continue;
 
+    // Scope the variant fetch to the job's workspace so a crafted queue row
+    // cannot pair a job with a variant from another workspace.
     const { data: variant } = await admin
       .from("content_variants")
       .select("variant_body, hashtags, cta, media_url, status")
       .eq("id", job.content_variant_id)
+      .eq("workspace_id", job.workspace_id)
       .maybeSingle();
 
     // Human approval is mandatory before any publish (Brief invariant). The
@@ -107,7 +124,13 @@ async function handle(request: Request) {
     });
   }
 
-  return NextResponse.json({ ok: true, processed: jobs?.length ?? 0, published, failed });
+  return NextResponse.json({
+    ok: true,
+    processed: jobs?.length ?? 0,
+    published,
+    failed,
+    skipped,
+  });
 }
 
 export const GET = handle;
