@@ -27,9 +27,8 @@ export function verifyState(state: string): { workspaceId: string } | null {
 }
 
 // Persist an encrypted platform connection (server-side, bypasses RLS via admin).
-// `refreshToken` (when provided) is stored in the dedicated encrypted column,
-// NOT in `metadata` — RLS grants clients `select` on metadata but not on the
-// refresh_token_encrypted column.
+// `refreshToken` (when provided) is stored in the dedicated encrypted column —
+// NOT in `metadata`, which RLS grants clients `select` on (see 0009).
 export async function saveConnection(params: {
   workspaceId: string;
   userId: string;

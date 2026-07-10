@@ -17,6 +17,10 @@ const tiktokBanners: Record<string, { text: string; ok: boolean }> = {
   connected: { text: "เชื่อมบัญชี TikTok สำเร็จ", ok: true },
   cancelled: { text: "ยกเลิกการเชื่อมบัญชี TikTok", ok: false },
   bad_state: { text: "state ไม่ถูกต้อง กรุณาลองใหม่", ok: false },
+  missing_scope: {
+    text: "TikTok: ต้องอนุญาต video.publish จึงจะโพสต์ได้ — เชื่อมใหม่แล้วเลือกอนุญาตทุกสิทธิ์",
+    ok: false,
+  },
   not_configured: { text: "ยังไม่ได้ตั้งค่า TIKTOK_CLIENT_KEY/SECRET บนเซิร์ฟเวอร์", ok: false },
   error: { text: "เกิดข้อผิดพลาดระหว่างเชื่อมบัญชี TikTok", ok: false },
 };
