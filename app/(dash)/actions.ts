@@ -23,6 +23,12 @@ export async function createProduct(formData: FormData) {
   const price = Number(formData.get("price")) || null;
   const commission_rate = Number(formData.get("commission_rate")) || null;
   const source_platform = String(formData.get("source_platform") ?? "manual");
+  // Category drives Thai regulatory rule packs (health / cosmetics /
+  // financial). Stored in raw_data so no schema change is required — the
+  // Compliance Gate reads it back at variant-generation time.
+  const rawCategory = String(formData.get("product_category") ?? "general");
+  const validCategories = ["general", "health", "cosmetics", "financial"];
+  const product_category = validCategories.includes(rawCategory) ? rawCategory : "general";
 
   // Deterministic score first, then let AI refine (falls back if no API key).
   const base = computeScore({ price, commission_rate });
@@ -36,7 +42,7 @@ export async function createProduct(formData: FormData) {
     source_platform,
     score: ai.score ?? base.score,
     tier: ai.tier ?? base.tier,
-    raw_data: { rationale: ai.rationale },
+    raw_data: { rationale: ai.rationale, category: product_category },
     created_by: ctx.userId,
   });
 
@@ -87,14 +93,24 @@ export async function generateContentForCampaign(formData: FormData) {
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, goal, target_platforms, products(name)")
+    .select("id, name, goal, target_platforms, products(name, raw_data)")
     .eq("id", campaignId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
   if (!campaign) return;
 
-  const productName =
-    (campaign.products as unknown as { name: string } | null)?.name ?? campaign.name;
+  const product = campaign.products as unknown as {
+    name: string;
+    raw_data?: { category?: string };
+  } | null;
+  const productName = product?.name ?? campaign.name;
+  const validCategories = ["general", "health", "cosmetics", "financial"] as const;
+  const rawCat = product?.raw_data?.category ?? "general";
+  const productCategory: (typeof validCategories)[number] = (
+    validCategories as readonly string[]
+  ).includes(rawCat)
+    ? (rawCat as (typeof validCategories)[number])
+    : "general";
   const platforms = ((campaign.target_platforms as string[]) ?? []).filter((p) =>
     PLATFORM_KEYS.includes(p as PlatformKey)
   ) as PlatformKey[];
@@ -128,6 +144,7 @@ export async function generateContentForCampaign(formData: FormData) {
       caption: variant.caption,
       hashtags: variant.hashtags,
       aiGenerated: true,
+      productCategory,
     });
 
     const { data: cv } = await supabase
@@ -176,11 +193,27 @@ export async function rewriteVariant(formData: FormData) {
   const variantId = String(formData.get("variant_id") ?? "");
   const { data: v } = await supabase
     .from("content_variants")
-    .select("id, platform, variant_body, hashtags")
+    .select(
+      "id, platform, variant_body, hashtags, content_items(campaign_id, campaigns(products(raw_data)))"
+    )
     .eq("id", variantId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
   if (!v) return;
+
+  // Category flows product → campaign → content_item → variant. Fall back to
+  // 'general' if the join comes back empty (older data, or campaigns without
+  // a product link).
+  const validCategories = ["general", "health", "cosmetics", "financial"] as const;
+  const item = v.content_items as unknown as {
+    campaigns?: { products?: { raw_data?: { category?: string } } | null } | null;
+  } | null;
+  const rawCat = item?.campaigns?.products?.raw_data?.category ?? "general";
+  const productCategory: (typeof validCategories)[number] = (
+    validCategories as readonly string[]
+  ).includes(rawCat)
+    ? (rawCat as (typeof validCategories)[number])
+    : "general";
 
   const platform = v.platform as PlatformKey;
   const before = checkCompliance({
@@ -188,6 +221,7 @@ export async function rewriteVariant(formData: FormData) {
     caption: v.variant_body as string,
     hashtags: (v.hashtags as string[]) ?? [],
     aiGenerated: true,
+    productCategory,
   });
   const rewritten = await rewriteForCompliance({
     caption: v.variant_body as string,
@@ -199,6 +233,7 @@ export async function rewriteVariant(formData: FormData) {
     caption: rewritten,
     hashtags: (v.hashtags as string[]) ?? [],
     aiGenerated: true,
+    productCategory,
   });
 
   await supabase

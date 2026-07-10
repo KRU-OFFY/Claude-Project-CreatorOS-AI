@@ -5,9 +5,11 @@
 
 import { PLATFORMS, type PlatformKey } from "@/lib/platforms";
 import type {
+  CategoryComplianceConfig,
   ComplianceInput,
   ComplianceResult,
   PlatformComplianceConfig,
+  ProductCategory,
   RuleResult,
 } from "@/lib/compliance/types";
 
@@ -19,6 +21,10 @@ import { youtube } from "@/lib/compliance/rules/youtube";
 import { lemon8 } from "@/lib/compliance/rules/lemon8";
 import { shopee } from "@/lib/compliance/rules/shopee";
 
+import { health } from "@/lib/compliance/rules/th/health";
+import { cosmetics } from "@/lib/compliance/rules/th/cosmetics";
+import { financial } from "@/lib/compliance/rules/th/financial";
+
 const CONFIGS: Record<PlatformKey, PlatformComplianceConfig> = {
   facebook,
   instagram,
@@ -28,6 +34,14 @@ const CONFIGS: Record<PlatformKey, PlatformComplianceConfig> = {
   lemon8,
   shopee_video: shopee,
   shopee_live: shopee,
+};
+
+// Regulated categories → their rule pack. `general` (or missing) skips
+// category checks entirely. Keys align with `ProductCategory` in types.ts.
+const CATEGORY_CONFIGS: Partial<Record<ProductCategory, CategoryComplianceConfig>> = {
+  health,
+  cosmetics,
+  financial,
 };
 
 const DISCLOSURE_PATTERNS = [
@@ -53,8 +67,9 @@ const SHARED_PROHIBITED: { pattern: RegExp; label: string }[] = [
 ];
 
 export function checkCompliance(input: ComplianceInput): ComplianceResult {
-  const { platform, caption, hashtags, aiGenerated } = input;
+  const { platform, caption, hashtags, aiGenerated, productCategory } = input;
   const cfg = CONFIGS[platform];
+  const catCfg = productCategory ? CATEGORY_CONFIGS[productCategory] : undefined;
   const fullText = caption + " " + hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ");
   const results: RuleResult[] = [];
 
@@ -87,12 +102,20 @@ export function checkCompliance(input: ComplianceInput): ComplianceResult {
     });
   }
 
-  // 3) Prohibited claims (shared + platform-specific).
-  const prohibited = [...SHARED_PROHIBITED, ...(cfg.extraProhibited ?? [])];
+  // 3) Prohibited claims (shared + platform-specific + category-specific).
+  // Category rules (health / cosmetics / financial) enforce Thai regulators
+  // like อย. and ก.ล.ต. — see lib/compliance/rules/th/*.ts.
+  const prohibited = [
+    ...SHARED_PROHIBITED,
+    ...(cfg.extraProhibited ?? []),
+    ...(catCfg?.prohibited ?? []),
+  ];
   const violations = prohibited.filter((c) => c.pattern.test(fullText));
   results.push({
     rule: "prohibited_claims",
-    label: "ข้อความอ้างสรรพคุณต้องห้าม",
+    label: catCfg
+      ? `ข้อความอ้างสรรพคุณต้องห้าม (${catCfg.regulator})`
+      : "ข้อความอ้างสรรพคุณต้องห้าม",
     passed: violations.length === 0,
     severity: "high",
     message:
@@ -100,6 +123,22 @@ export function checkCompliance(input: ComplianceInput): ComplianceResult {
         ? "ไม่พบข้อความอ้างเกินจริง"
         : `พบข้อความเสี่ยง: ${violations.map((v) => v.label).join(", ")}`,
   });
+
+  // 3b) Category-required disclaimers. Fires only when a regulated category
+  // is set — if none of the disclaimer patterns match, the caption is
+  // missing a legally required warning (e.g. "การลงทุนมีความเสี่ยง").
+  if (catCfg?.required) {
+    const ok = catCfg.required.patterns.some((p) => p.test(fullText));
+    results.push({
+      rule: "category_required_disclaimer",
+      label: catCfg.required.label,
+      passed: ok,
+      severity: "high",
+      message: ok
+        ? "พบข้อความที่กำกับตามข้อบังคับแล้ว"
+        : catCfg.required.message,
+    });
+  }
 
   // 4) Caption length.
   if (cfg.captionMaxLength) {
