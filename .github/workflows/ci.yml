@@ -28,3 +28,5 @@ jobs:
             exit 1
           fi
           echo "OK — no fs/ffmpeg in app/api"
+      - name: RLS invariants (auto-scanned migrations)
+        run: node scripts/rls-check.mjs
