@@ -21,17 +21,19 @@ export async function POST(request: Request) {
     mediaUrl?: string;
     thumbnailUrl?: string;
     durationMs?: number;
-    error?: string;
+    error?: unknown;
   } | null;
 
-  if (!body?.jobId || !body.nonce || typeof body.ts !== "number" || !body.signature) {
+  // Number.isInteger — not `typeof === 'number'` — so NaN/Infinity/floats
+  // are rejected before they can propagate into the drift calc.
+  if (!body?.jobId || !body.nonce || !Number.isInteger(body.ts) || !body.signature) {
     return NextResponse.json({ error: "malformed" }, { status: 400 });
   }
 
   const auth = verifyCallbackAuth({
     jobId: body.jobId,
     nonce: body.nonce,
-    ts: body.ts,
+    ts: body.ts as number,
     signature: body.signature,
   });
   if (!auth.ok) {
@@ -60,11 +62,13 @@ export async function POST(request: Request) {
   const nowIso = new Date().toISOString();
 
   if (body.error) {
+    // Workers may send `error` as a plain string OR a serialized object —
+    // `String()` covers both without a TypeError.
     await admin
       .from("render_jobs")
       .update({
         status: "failed",
-        error_message: body.error.slice(0, 2000),
+        error_message: String(body.error).slice(0, 2000),
         completed_at: nowIso,
       })
       .eq("id", body.jobId);

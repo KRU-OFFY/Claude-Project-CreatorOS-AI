@@ -454,7 +454,7 @@ export async function renderVariantMedia(formData: FormData) {
   if (!v) throw new Error("ไม่พบ variant");
 
   const nonce = generateNonce();
-  const { data: job } = await supabase
+  const { data: job, error: jobErr } = await supabase
     .from("render_jobs")
     .insert({
       workspace_id: ctx.workspaceId,
@@ -465,10 +465,24 @@ export async function renderVariantMedia(formData: FormData) {
     })
     .select("id")
     .single();
-  if (!job) throw new Error("สร้าง render_job ไม่สำเร็จ");
+  if (jobErr || !job) {
+    throw new Error(
+      `สร้าง render_job ไม่สำเร็จ: ${jobErr?.message ?? "unknown error"}`
+    );
+  }
 
-  const h = await headers();
-  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  // Trusted origin comes from APP_URL (set at deploy time), NOT from the
+  // request's Host / X-Forwarded-Proto headers. Otherwise a spoofed Host
+  // could point the worker's callback (which carries jobId + nonce +
+  // signature + mediaUrl) at an attacker-controlled host. Fall back to the
+  // request headers only when APP_URL isn't set (dev / self-hosted).
+  const configuredOrigin = (process.env.APP_URL ?? "").replace(/\/+$/, "");
+  const origin = configuredOrigin
+    ? configuredOrigin
+    : await (async () => {
+        const h = await headers();
+        return `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+      })();
 
   // Pick a template based on the target platform's aspect ratio bias.
   // TikTok / Instagram Reels want vertical; Facebook / YouTube tolerate

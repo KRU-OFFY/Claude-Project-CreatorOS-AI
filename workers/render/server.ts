@@ -60,16 +60,21 @@ async function postCallback(
   callbackUrl: string,
   body: Record<string, unknown>
 ): Promise<void> {
-  await fetch(callbackUrl, {
+  // Errors (network / timeout / non-2xx) bubble to the caller so the
+  // outer `try/catch` in handleRender can flip to the failure-callback
+  // path or add retry logic. A previous version .catch()'d here and
+  // hid failures.
+  const res = await fetch(callbackUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
     // The app's callback handler is idempotent; if it 5xxs, the worker MAY
     // retry with a fresh `ts` + signature.
     signal: AbortSignal.timeout(10_000),
-  }).catch(() => {
-    // Bubble to the caller — retry logic is your call.
   });
+  if (!res.ok) {
+    throw new Error(`callback ${res.status}`);
+  }
 }
 
 // Framework-agnostic handler. Wire into Express: `app.post("/render", ...)`.
@@ -85,6 +90,16 @@ export async function handleRender(
 
   // Kick the render off in the background so we can 202-return within the
   // 15s window the app allows. Errors funnel to the failure callback.
+  //
+  // ⚠️  SERVERLESS NOTE. If you deploy this to Google Cloud Run, AWS Lambda,
+  // or any platform that freezes / throttles the container CPU after the
+  // HTTP response is sent, this floating promise will pause mid-render and
+  // the callback will never fire. Two options that both work:
+  //   1) enable "CPU always allocated" (Cloud Run) / equivalent, OR
+  //   2) push the render into a real job queue (Cloud Tasks, BullMQ,
+  //      SQS+worker) and let the queue worker call the app back.
+  // A dedicated container host (Fly.io, Railway, your own VM) doesn't have
+  // this problem — the container keeps running until the render finishes.
   void (async () => {
     try {
       const result = await renderMp4(job);

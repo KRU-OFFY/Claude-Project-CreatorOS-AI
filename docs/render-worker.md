@@ -14,8 +14,9 @@ The client side lives in `lib/render.ts`; the callback lives at
 | ---------------------- | -------- | ---------------------------------------------- |
 | `RENDER_WORKER_URL`    | yes      | Base URL of the worker (e.g. `https://render.internal`)   |
 | `RENDER_WORKER_SECRET` | yes      | Shared HMAC secret (`openssl rand -hex 32`)    |
+| `APP_URL`              | strongly recommended | Trusted origin the worker calls back on. **Set this in production** — otherwise the app falls back to request `Host`/`X-Forwarded-Proto` headers, which are Host-header-injection candidates on shared infra. |
 
-Without both, the Content Studio "🎬 สั่ง render" button is hidden and
+Without the first two, the Content Studio "🎬 สั่ง render" button is hidden and
 `renderConfigured()` returns false.
 
 ## 1) Enqueue — `POST {RENDER_WORKER_URL}/render`
@@ -118,3 +119,15 @@ const signature = crypto.createHmac("sha256", secret).update(payload).digest("he
 See `workers/render/` for a minimal TypeScript skeleton that satisfies the
 contract. It is NOT deployed as part of this repo — pick a host and drop
 the code there.
+
+### ⚠️  Serverless caveat
+
+Cloud Run / Lambda / any "CPU frozen on response return" host will pause
+the worker mid-render and swallow the callback. Either:
+
+- Enable "CPU is always allocated" (Cloud Run) / equivalent, OR
+- Push renders into a real job queue (Cloud Tasks, BullMQ, SQS+worker) so
+  the queue worker — not the request handler — calls the app back.
+
+A dedicated container host (Fly.io, Railway, your own VM) doesn't have
+this problem.

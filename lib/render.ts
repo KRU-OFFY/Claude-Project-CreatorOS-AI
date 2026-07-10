@@ -18,8 +18,14 @@ export function renderConfigured(): boolean {
   return Boolean(process.env.RENDER_WORKER_URL && process.env.RENDER_WORKER_SECRET);
 }
 
+// Return the shared HMAC secret. **Throws** when unset — falling back to an
+// empty string would let a request signed with the empty key satisfy
+// verifyCallbackAuth (auth bypass). Callers gate on `renderConfigured()`
+// before invoking sign/verify, so throwing here is a defensive backstop.
 function secret(): string {
-  return process.env.RENDER_WORKER_SECRET ?? "";
+  const key = process.env.RENDER_WORKER_SECRET;
+  if (!key) throw new Error("RENDER_WORKER_SECRET is not configured");
+  return key;
 }
 
 function sign(payload: string): string {
@@ -27,9 +33,16 @@ function sign(payload: string): string {
 }
 
 // Constant-time compare so a wrong signature doesn't leak byte offsets
-// through timing. Falsy on length mismatch (safe short-circuit).
+// through timing. Falsy on length mismatch (safe short-circuit). Also
+// returns false — instead of throwing — when the secret is not configured,
+// so an unconfigured deployment fails closed on any callback.
 export function verifySignature(payload: string, expected: string): boolean {
-  const computed = sign(payload);
+  let computed: string;
+  try {
+    computed = sign(payload);
+  } catch {
+    return false;
+  }
   if (computed.length !== expected.length) return false;
   return crypto.timingSafeEqual(
     Buffer.from(computed, "hex"),
@@ -68,8 +81,12 @@ export async function enqueueRender(job: RenderJobPayload): Promise<EnqueueResul
   }
   const body = JSON.stringify(job);
   const signature = sign(body);
+  // Trim any trailing slash so an env value of
+  // "https://render.internal/" doesn't produce "//render" — some strict
+  // reverse proxies 404 on double slashes.
+  const baseUrl = (process.env.RENDER_WORKER_URL ?? "").replace(/\/+$/, "");
   try {
-    const res = await fetch(`${process.env.RENDER_WORKER_URL}/render`, {
+    const res = await fetch(`${baseUrl}/render`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
