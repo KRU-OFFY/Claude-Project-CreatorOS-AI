@@ -17,12 +17,18 @@ vi.mock("@/lib/meta", () => ({
 
 vi.mock("@/lib/tiktok", () => ({
   publishVideo: vi.fn(),
+  creatorInfo: vi.fn(),
+}));
+
+vi.mock("@/lib/youtube", () => ({
+  publishVideo: vi.fn(),
 }));
 
 import { executePublish } from "@/lib/publish";
 import { getMetaConnection, getConnection } from "@/lib/connections";
 import { publishFacebook, publishInstagram } from "@/lib/meta";
-import { publishVideo } from "@/lib/tiktok";
+import { publishVideo, creatorInfo } from "@/lib/tiktok";
+import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
 
 const conn = (token: string, metadata: Record<string, unknown> = {}) => ({
   accountName: "acct",
@@ -37,6 +43,14 @@ beforeEach(() => {
   vi.mocked(publishFacebook).mockReset();
   vi.mocked(publishInstagram).mockReset();
   vi.mocked(publishVideo).mockReset();
+  vi.mocked(creatorInfo).mockReset();
+  vi.mocked(publishYouTubeVideo).mockReset();
+  // TikTok Direct Post requires privacy_level from creator_info; default the
+  // mock to SELF_ONLY-capable so the happy path proceeds.
+  vi.mocked(creatorInfo).mockResolvedValue({
+    nickname: "tester",
+    privacyLevelOptions: ["SELF_ONLY"],
+  });
 });
 
 const variantBase = { variant_body: "hello", hashtags: null, cta: null, media_url: null };
@@ -90,7 +104,7 @@ describe("executePublish — instagram", () => {
 });
 
 describe("executePublish — tiktok", () => {
-  it("uses the generic getConnection (not getMetaConnection)", async () => {
+  it("uses the generic getConnection and passes the allowed privacy level", async () => {
     vi.mocked(getConnection).mockResolvedValue(conn("tt-token"));
     vi.mocked(publishVideo).mockResolvedValue("pub_1");
     const out = await executePublish(
@@ -99,6 +113,12 @@ describe("executePublish — tiktok", () => {
     );
     expect(getConnection).toHaveBeenCalledWith("ws", "tiktok");
     expect(getMetaConnection).not.toHaveBeenCalled();
+    expect(publishVideo).toHaveBeenCalledWith(
+      "tt-token",
+      "hello",
+      "https://x.test/v.mp4",
+      "SELF_ONLY"
+    );
     expect(out.publishedUrl).toBe("tiktok:publish/pub_1");
   });
 
@@ -110,6 +130,46 @@ describe("executePublish — tiktok", () => {
     );
     expect(out.error).toMatch(/วิดีโอ/);
     expect(publishVideo).not.toHaveBeenCalled();
+  });
+
+  it("errors when creator_info returns no allowed privacy levels", async () => {
+    vi.mocked(getConnection).mockResolvedValue(conn("tt-token"));
+    vi.mocked(creatorInfo).mockResolvedValue({ nickname: "t", privacyLevelOptions: [] });
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "tiktok" },
+      { ...variantBase, media_url: "https://x.test/v.mp4" }
+    );
+    expect(out.error).toMatch(/privacy_level/);
+    expect(publishVideo).not.toHaveBeenCalled();
+  });
+});
+
+describe("executePublish — youtube", () => {
+  it("posts via the YouTube connector and returns the watch URL", async () => {
+    vi.mocked(getConnection).mockResolvedValue(conn("yt-token"));
+    vi.mocked(publishYouTubeVideo).mockResolvedValue("vid123");
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "youtube" },
+      { ...variantBase, media_url: "https://x.test/v.mp4" }
+    );
+    expect(getConnection).toHaveBeenCalledWith("ws", "youtube");
+    expect(publishYouTubeVideo).toHaveBeenCalledWith(
+      "yt-token",
+      "hello",
+      "https://x.test/v.mp4",
+      "private"
+    );
+    expect(out.publishedUrl).toBe("https://youtube.com/watch?v=vid123");
+  });
+
+  it("requires media_url", async () => {
+    vi.mocked(getConnection).mockResolvedValue(conn("yt-token"));
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "youtube" },
+      variantBase
+    );
+    expect(out.error).toMatch(/วิดีโอ/);
+    expect(publishYouTubeVideo).not.toHaveBeenCalled();
   });
 });
 
