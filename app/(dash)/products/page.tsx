@@ -32,6 +32,24 @@ export default async function ProductsPage() {
                 <option value="lazada">Lazada</option>
               </select>
             </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-black/60">
+                หมวดหมู่ (เพื่อตรวจกฎเฉพาะ)
+              </label>
+              <select
+                name="product_category"
+                defaultValue="general"
+                className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm"
+              >
+                <option value="general">ทั่วไป</option>
+                <option value="health">อาหารเสริม/สุขภาพ (อย.)</option>
+                <option value="cosmetics">เครื่องสำอาง (อย.)</option>
+                <option value="financial">การเงิน/การลงทุน (ก.ล.ต.)</option>
+              </select>
+              <p className="mt-1 text-[11px] text-black/40">
+                เลือกให้ตรง — Compliance Gate จะตรวจกฎของหน่วยงานกำกับตามหมวดที่เลือก
+              </p>
+            </div>
             <button className="w-full rounded-lg bg-gradient-to-r from-brand to-brand-2 px-3 py-2 text-sm font-semibold text-white">
               เพิ่ม + ให้ AI คะแนน
             </button>
