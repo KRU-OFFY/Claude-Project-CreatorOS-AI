@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { authorizeCron } from "@/lib/cron";
+import { authorizeCron, withCronBoundary } from "@/lib/cron";
 import { longLivedToken } from "@/lib/meta";
 import { encryptToken, decryptToken } from "@/lib/tokens";
 
@@ -66,5 +66,6 @@ async function handle(request: Request) {
   return NextResponse.json({ ok: true, candidates: conns?.length ?? 0, refreshed, errored });
 }
 
-export const GET = handle;
-export const POST = handle;
+const wrapped = withCronBoundary("refresh-tokens", handle);
+export const GET = wrapped;
+export const POST = wrapped;
