@@ -218,13 +218,13 @@ export async function rewriteVariant(formData: FormData) {
   const platform = v.platform as PlatformKey;
   const before = checkCompliance({
     platform,
-    caption: v.variant_body as string,
+    caption: (v.variant_body as string | null) ?? "",
     hashtags: (v.hashtags as string[]) ?? [],
     aiGenerated: true,
     productCategory,
   });
   const rewritten = await rewriteForCompliance({
-    caption: v.variant_body as string,
+    caption: (v.variant_body as string | null) ?? "",
     platform,
     issues: before.results.filter((r) => !r.passed).map((r) => r.message),
   });

@@ -135,6 +135,87 @@ describe("Track H — Thai regulatory rule packs", () => {
     });
   });
 
+  describe("regression: Gemini review bypasses", () => {
+    it("catches 'รักษาโควิด' (covid variant added)", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ช่วยรักษาโควิดได้`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "health",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(false);
+    });
+
+    it("catches 'ลด 5 กก. ใน 7 วัน' (no น้ำหนัก before number)", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ลด 5 กก. ใน 7 วัน`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "health",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(false);
+    });
+
+    it("catches 'ลดความอ้วนเร็ว' (obesity variant added)", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ลดความอ้วนเร็ว`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "health",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(false);
+    });
+
+    it("catches informal 'หมอแนะนำ'", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} หมอแนะนำให้ทาน`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "health",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(false);
+    });
+
+    it("passes benign 'ล้านแรก' without a timeline (financial false-positive fix)", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ช่วยคุณเก็บเงินล้านแรก การลงทุนมีความเสี่ยง ผู้ลงทุนควรศึกษาข้อมูลก่อนตัดสินใจลงทุน`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "financial",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(true);
+    });
+
+    it("still catches 'ล้านแรกใน 30 วัน' (timeline present)", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ล้านแรกใน 30 วัน การลงทุนมีความเสี่ยง ผู้ลงทุนควรศึกษาข้อมูล`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "financial",
+      });
+      expect(r.results.find((x) => x.rule === "prohibited_claims")!.passed).toBe(false);
+    });
+
+    it("accepts mandated warning 'ไม่มีผลในการป้องกันหรือรักษาโรค' as disclaimer", () => {
+      const r = checkCompliance({
+        platform: "facebook",
+        caption: `${clean} ทานทุกวัน ไม่มีผลในการป้องกันหรือรักษาโรค`,
+        hashtags: [],
+        aiGenerated: false,
+        productCategory: "health",
+      });
+      expect(
+        r.results.find((x) => x.rule === "category_required_disclaimer")!.passed
+      ).toBe(true);
+    });
+  });
+
   describe("general (no category)", () => {
     it("does not add category-specific rules for 'general'", () => {
       const r = checkCompliance({
