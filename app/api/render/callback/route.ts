@@ -1,40 +1,95 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyCallbackAuth } from "@/lib/render";
 
-// Callback from the external Render Worker (Fly.io/Railway/Cloud Run) after it
-// finishes rendering an MP4 and uploads it to Supabase Storage. The worker
-// authenticates with RENDER_WORKER_SECRET. Serverless-safe: no filesystem or
-// media transcoding happens in this route (that runs in the external worker).
+// Callback from the external Render Worker. The worker signs an HMAC over
+// (jobId + nonce + timestamp) using RENDER_WORKER_SECRET. This route:
+//   1) verifies the signature + timestamp drift (±5min)
+//   2) verifies the nonce still matches the stored render_jobs row
+//   3) updates render_jobs status + media_url + duration
+//   4) mirrors media_url onto the source content_variant so the publish
+//      flow can pick it up
+//
+// Serverless-safe: no fs / ffmpeg / child_process here — CI enforces that.
 export async function POST(request: Request) {
-  // The secret is mandatory: without it, an unauthenticated request could set
-  // media_url on any variant via the service-role client. Fail closed.
-  const secret = process.env.RENDER_WORKER_SECRET;
-  const auth = request.headers.get("authorization");
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const body = (await request.json().catch(() => null)) as {
+    jobId?: string;
+    nonce?: string;
+    ts?: number;
+    signature?: string;
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    durationMs?: number;
+    error?: string;
+  } | null;
+
+  if (!body?.jobId || !body.nonce || typeof body.ts !== "number" || !body.signature) {
+    return NextResponse.json({ error: "malformed" }, { status: 400 });
   }
 
-  const body = await request.json().catch(() => null);
-  const variantId: string | undefined = body?.variantId;
-  const mediaUrl: string | undefined = body?.mediaUrl;
-  const errorMessage: string | undefined = body?.error;
-  if (!variantId) {
-    return NextResponse.json({ error: "variantId required" }, { status: 400 });
+  const auth = verifyCallbackAuth({
+    jobId: body.jobId,
+    nonce: body.nonce,
+    ts: body.ts,
+    signature: body.signature,
+  });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.reason }, { status: 401 });
   }
 
   const admin = createAdminClient();
-  if (!admin) {
-    return NextResponse.json({ error: "not configured" }, { status: 503 });
+  if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
+
+  // Match the nonce stored at enqueue time. Signature alone would be enough
+  // for authenticity, but this ties the callback to exactly one enqueue —
+  // a leaked signature can't hijack a different job later.
+  const { data: job } = await admin
+    .from("render_jobs")
+    .select("id, content_variant_id, callback_nonce, status")
+    .eq("id", body.jobId)
+    .maybeSingle();
+  if (!job || job.callback_nonce !== body.nonce) {
+    return NextResponse.json({ error: "unknown job" }, { status: 404 });
+  }
+  // Idempotency: repeat callbacks for a job already terminal are a no-op.
+  if (job.status === "succeeded" || job.status === "failed") {
+    return NextResponse.json({ ok: true, status: "already_terminal" });
   }
 
-  if (errorMessage) {
-    return NextResponse.json({ ok: true, status: "error_logged" });
+  const nowIso = new Date().toISOString();
+
+  if (body.error) {
+    await admin
+      .from("render_jobs")
+      .update({
+        status: "failed",
+        error_message: body.error.slice(0, 2000),
+        completed_at: nowIso,
+      })
+      .eq("id", body.jobId);
+    return NextResponse.json({ ok: true, status: "failed" });
+  }
+
+  if (!body.mediaUrl) {
+    return NextResponse.json({ error: "mediaUrl or error required" }, { status: 400 });
   }
 
   await admin
-    .from("content_variants")
-    .update({ media_url: mediaUrl })
-    .eq("id", variantId);
+    .from("render_jobs")
+    .update({
+      status: "succeeded",
+      media_url: body.mediaUrl,
+      thumbnail_url: body.thumbnailUrl ?? null,
+      duration_ms: body.durationMs ?? null,
+      completed_at: nowIso,
+    })
+    .eq("id", body.jobId);
 
-  return NextResponse.json({ ok: true });
+  // Mirror onto the source variant so downstream publish picks it up.
+  await admin
+    .from("content_variants")
+    .update({ media_url: body.mediaUrl })
+    .eq("id", job.content_variant_id);
+
+  return NextResponse.json({ ok: true, status: "succeeded" });
 }

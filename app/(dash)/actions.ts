@@ -8,6 +8,13 @@ import { scoreProduct, generateBrief, generateVariant, rewriteForCompliance } fr
 import { computeScore } from "@/lib/scoring/product-score";
 import { checkCompliance } from "@/lib/compliance";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/platforms";
+import {
+  enqueueRender,
+  generateNonce,
+  renderConfigured,
+  type RenderJobPayload,
+} from "@/lib/render";
+import { headers } from "next/headers";
 
 async function ctxAndClient() {
   const supabase = await createClient();
@@ -425,4 +432,90 @@ export async function recordMetrics(formData: FormData) {
   });
   revalidatePath("/analytics");
   revalidatePath("/revenue-forecast");
+}
+
+// Track C — enqueue a media render for a content_variant via the external
+// render worker. Creates a render_jobs row, POSTs to the worker with an HMAC,
+// and lets the worker call back into /api/render/callback when done.
+export async function renderVariantMedia(formData: FormData) {
+  const { supabase, ctx } = await ctxAndClient();
+  const variantId = String(formData.get("variant_id") ?? "");
+  if (!variantId) return;
+  if (!renderConfigured()) {
+    throw new Error("ยังไม่ตั้งค่า RENDER_WORKER_URL/RENDER_WORKER_SECRET");
+  }
+
+  const { data: v } = await supabase
+    .from("content_variants")
+    .select("id, platform, variant_body, hashtags, cta, media_url")
+    .eq("id", variantId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!v) throw new Error("ไม่พบ variant");
+
+  const nonce = generateNonce();
+  const { data: job } = await supabase
+    .from("render_jobs")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      content_variant_id: variantId,
+      requested_by: ctx.userId,
+      status: "queued",
+      callback_nonce: nonce,
+    })
+    .select("id")
+    .single();
+  if (!job) throw new Error("สร้าง render_job ไม่สำเร็จ");
+
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+
+  // Pick a template based on the target platform's aspect ratio bias.
+  // TikTok / Instagram Reels want vertical; Facebook / YouTube tolerate
+  // square (their card view crops it acceptably).
+  const platform = String(v.platform ?? "");
+  const template: RenderJobPayload["template"] =
+    platform === "tiktok" || platform === "shopee_live" || platform === "shopee_video"
+      ? "vertical"
+      : platform === "instagram"
+        ? "story"
+        : "square";
+
+  const payload: RenderJobPayload = {
+    jobId: job.id as string,
+    workspaceId: ctx.workspaceId,
+    contentVariantId: variantId,
+    callbackNonce: nonce,
+    callbackUrl: `${origin}/api/render/callback`,
+    template,
+    caption: (v.variant_body as string) ?? "",
+    hashtags: (v.hashtags as string[]) ?? [],
+    cta: (v.cta as string) ?? null,
+    sourceMediaUrl: (v.media_url as string) ?? null,
+  };
+
+  const result = await enqueueRender(payload);
+  if (!result.ok) {
+    await supabase
+      .from("render_jobs")
+      .update({ status: "failed", error_message: result.error ?? "enqueue failed" })
+      .eq("id", job.id);
+    throw new Error(`worker rejected: ${result.error ?? result.status}`);
+  }
+
+  await supabase
+    .from("render_jobs")
+    .update({ status: "rendering" })
+    .eq("id", job.id);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: "render.enqueue",
+    entityType: "render_jobs",
+    entityId: job.id as string,
+    metadata: { platform, template },
+  });
+
+  revalidatePath("/content-studio");
 }
