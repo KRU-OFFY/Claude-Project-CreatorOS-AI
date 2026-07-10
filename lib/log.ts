@@ -10,11 +10,16 @@ type Level = "debug" | "info" | "warn" | "error";
 
 const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 
-function currentLevel(): number {
+// Cache the effective level at module-eval time. `process.env` reads cross
+// the JS/C++ boundary in Node, so re-reading on every emit is measurable
+// overhead when logs are hot (cron loops, per-row iterations). Tests use
+// `vi.resetModules()` to re-import with different LOG_LEVEL values, so
+// caching aligns with the test model too.
+const CURRENT_LEVEL: number = (() => {
   const v = (process.env.LOG_LEVEL ?? "").toLowerCase() as Level;
   if (v && LEVELS[v] !== undefined) return LEVELS[v];
   return process.env.NODE_ENV === "production" ? LEVELS.info : LEVELS.debug;
-}
+})();
 
 interface LogRecord {
   ts: string;
@@ -28,7 +33,7 @@ interface LogRecord {
 }
 
 function emit(rec: LogRecord): void {
-  if (LEVELS[rec.level] < currentLevel()) return;
+  if (LEVELS[rec.level] < CURRENT_LEVEL) return;
   try {
     process.stderr.write(JSON.stringify(rec) + "\n");
   } catch {
@@ -96,6 +101,7 @@ async function trySentry() {
     const mod = (await import("@sentry/node").catch(() => null)) as {
       init?: (opts: { dsn: string; tracesSampleRate?: number }) => void;
       captureException?: (e: unknown) => void;
+      flush?: (timeout?: number) => Promise<boolean>;
     } | null;
     if (!mod?.init || !mod.captureException) return null;
     mod.init({ dsn: process.env.SENTRY_DSN, tracesSampleRate: 0 });
@@ -109,10 +115,16 @@ async function trySentry() {
 export async function reportError(e: unknown): Promise<void> {
   const mod = (sentryClient ?? (await trySentry())) as {
     captureException?: (e: unknown) => void;
+    flush?: (timeout?: number) => Promise<boolean>;
   } | null;
   if (mod?.captureException) {
     try {
       mod.captureException(e);
+      // Vercel / other serverless runtimes freeze the container as soon as
+      // the response returns. Sentry's queue is async — without flush the
+      // event may never leave the box. 2s bound keeps the boundary fast
+      // even when Sentry is slow / unreachable.
+      if (mod.flush) await mod.flush(2000);
     } catch {
       // Sentry itself failed — nothing more to do.
     }
