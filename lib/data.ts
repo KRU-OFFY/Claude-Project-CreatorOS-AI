@@ -82,6 +82,21 @@ export async function listAnalytics() {
   return data ?? [];
 }
 
+// Last-N-days window used by the trend helpers (Advisor + Forecast).
+// Server-side date filter keeps the payload small for high-volume workspaces.
+export async function listAnalyticsWindow(days: number) {
+  const s = await scoped();
+  if (!s) return [];
+  const sinceIso = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const { data } = await s.supabase
+    .from("analytics_metrics")
+    .select("platform, metric_date, views, reach, engagement, clicks, orders, revenue, commission")
+    .eq("workspace_id", s.ws)
+    .gte("metric_date", sinceIso)
+    .order("metric_date", { ascending: true });
+  return data ?? [];
+}
+
 export async function listComplianceItems() {
   const s = await scoped();
   if (!s) return [];

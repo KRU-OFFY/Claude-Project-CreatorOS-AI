@@ -104,14 +104,18 @@ export interface AdvisorRecommendation {
   priority: "high" | "medium" | "low";
 }
 
+// The advisor now grounds every prompt in a 14-day trend summary so the
+// recommendations reference real numbers ("revenue trending +22% — double
+// down on X") instead of generic best-practice.
 export async function adviseNextCycle(summary: {
   totals: Record<string, number>;
   byPlatform: { platform: string; views: number; clicks: number; revenue: number; commission: number }[];
   topProducts: { name: string; revenue: number }[];
+  trends?: import("@/lib/analytics/trends").TrendSummary;
 }): Promise<AdvisorRecommendation[]> {
   const ai = await generateJSON<AdvisorRecommendation[]>(
-    "คุณคือ growth advisor สำหรับ creator/affiliate วิเคราะห์ผลงานและแนะนำรอบถัดไป ภาษาไทย",
-    `ข้อมูลผลงาน: ${JSON.stringify(summary)} — ตอบ JSON array ของ {"topic": string, "recommendation": string, "priority": "high"|"medium"|"low"} 3-5 ข้อ (สินค้า/เวลาโพสต์/รูปแบบคอนเทนต์/แพลตฟอร์ม)`
+    "คุณคือ growth advisor สำหรับ creator/affiliate ในตลาดไทย วิเคราะห์ผลงานจริงและแนะนำรอบถัดไป อ้างอิงตัวเลขในบรีฟเสมอ ห้ามแต่งตัวเลข ห้ามพูดกว้างๆ ตอบภาษาไทย",
+    `ข้อมูลผลงาน: ${JSON.stringify(summary)} — ตอบ JSON array ของ {"topic": string, "recommendation": string(อ้างตัวเลขจริง เช่น "+22% รายได้ใน 14 วัน"), "priority": "high"|"medium"|"low"} 3-5 ข้อ ครอบคลุมด้าน: สินค้า, เวลาโพสต์, รูปแบบคอนเทนต์, แพลตฟอร์ม, และคำเตือนถ้าเห็น trend ตกลง`
   );
   return ai ?? fallback.adviseNextCycle(summary);
 }
