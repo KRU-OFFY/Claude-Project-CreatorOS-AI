@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { authorizeCron } from "@/lib/cron";
+import { authorizeCron, withCronBoundary } from "@/lib/cron";
 import { executePublish } from "@/lib/publish";
 import { getConnection } from "@/lib/connections";
 import { logAudit } from "@/lib/audit";
@@ -156,5 +156,6 @@ async function handle(request: Request) {
   });
 }
 
-export const GET = handle;
-export const POST = handle;
+const wrapped = withCronBoundary("publish", handle);
+export const GET = wrapped;
+export const POST = wrapped;

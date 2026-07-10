@@ -17,14 +17,33 @@ const tiktokBanners: Record<string, { text: string; ok: boolean }> = {
   connected: { text: "เชื่อมบัญชี TikTok สำเร็จ", ok: true },
   cancelled: { text: "ยกเลิกการเชื่อมบัญชี TikTok", ok: false },
   bad_state: { text: "state ไม่ถูกต้อง กรุณาลองใหม่", ok: false },
+  missing_scope: {
+    text: "TikTok: ต้องอนุญาต video.publish จึงจะโพสต์ได้ — เชื่อมใหม่แล้วเลือกอนุญาตทุกสิทธิ์",
+    ok: false,
+  },
   not_configured: { text: "ยังไม่ได้ตั้งค่า TIKTOK_CLIENT_KEY/SECRET บนเซิร์ฟเวอร์", ok: false },
   error: { text: "เกิดข้อผิดพลาดระหว่างเชื่อมบัญชี TikTok", ok: false },
+};
+
+const youtubeBanners: Record<string, { text: string; ok: boolean }> = {
+  connected: { text: "เชื่อมช่อง YouTube สำเร็จ", ok: true },
+  cancelled: { text: "ยกเลิกการเชื่อมบัญชี YouTube", ok: false },
+  bad_state: { text: "state ไม่ถูกต้อง กรุณาลองใหม่", ok: false },
+  missing_scope: {
+    text: "YouTube: ต้องอนุญาต youtube.upload จึงจะโพสต์ได้ — เชื่อมใหม่และเลือกอนุญาตทุกสิทธิ์",
+    ok: false,
+  },
+  not_configured: {
+    text: "ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID/SECRET บนเซิร์ฟเวอร์",
+    ok: false,
+  },
+  error: { text: "เกิดข้อผิดพลาดระหว่างเชื่อมบัญชี YouTube", ok: false },
 };
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ meta?: string; tiktok?: string; msg?: string }>;
+  searchParams: Promise<{ meta?: string; tiktok?: string; youtube?: string; msg?: string }>;
 }) {
   const [connections, ctx, sp] = await Promise.all([
     listChannelConnections(),
@@ -33,7 +52,13 @@ export default async function SettingsPage({
   ]);
 
   const byPlatform = new Map(connections.map((c) => [c.platform, c]));
-  const banner = sp.meta ? metaBanners[sp.meta] : sp.tiktok ? tiktokBanners[sp.tiktok] : null;
+  const banner = sp.meta
+    ? metaBanners[sp.meta]
+    : sp.tiktok
+      ? tiktokBanners[sp.tiktok]
+      : sp.youtube
+        ? youtubeBanners[sp.youtube]
+        : null;
 
   return (
     <div>
@@ -100,6 +125,35 @@ export default async function SettingsPage({
               {byPlatform.get("tiktok")?.status === "connected"
                 ? "เชื่อมใหม่"
                 : "เชื่อมบัญชี TikTok"}
+            </a>
+          </div>
+        </Card>
+      </div>
+
+      <div className="mb-4">
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">เชื่อมช่อง YouTube</h2>
+              <p className="mt-1 text-xs text-black/50">
+                เชื่อมช่องเพื่ออัปโหลดวิดีโอผ่าน YouTube Data API v3 — token เข้ารหัสฝั่ง server
+                {byPlatform.get("youtube")?.status === "connected" && (
+                  <span className="ml-1 text-green-600">
+                    (เชื่อมแล้ว: {byPlatform.get("youtube")?.account_name})
+                  </span>
+                )}
+              </p>
+              <p className="mt-1 text-[11px] text-black/40">
+                Privacy เริ่มต้น: private (ตั้ง YOUTUBE_DEFAULT_PRIVACY เป็น unlisted/public เมื่อพร้อม)
+              </p>
+            </div>
+            <a
+              href="/api/connect/youtube/start"
+              className="rounded-lg bg-gradient-to-r from-brand to-brand-2 px-4 py-2 text-sm font-semibold text-white"
+            >
+              {byPlatform.get("youtube")?.status === "connected"
+                ? "เชื่อมใหม่ / เปลี่ยนช่อง"
+                : "เชื่อมช่อง YouTube"}
             </a>
           </div>
         </Card>
