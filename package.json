@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:rls": "node scripts/rls-check.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
