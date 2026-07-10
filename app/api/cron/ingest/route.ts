@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { authorizeCron } from "@/lib/cron";
+import { authorizeCron, withCronBoundary } from "@/lib/cron";
 import { getMetaConnection } from "@/lib/connections";
 import { facebookPostInsights, instagramMediaInsights, type MetaInsight } from "@/lib/meta";
 import { normalize } from "@/lib/analytics/normalize";
@@ -131,5 +131,6 @@ async function handle(request: Request) {
   return NextResponse.json({ ok: true, jobs: processed, ingested });
 }
 
-export const GET = handle;
-export const POST = handle;
+const wrapped = withCronBoundary("ingest", handle);
+export const GET = wrapped;
+export const POST = wrapped;

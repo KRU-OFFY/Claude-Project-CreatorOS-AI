@@ -30,7 +30,7 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 
 ## Security invariants (do not break)
 - `SUPABASE_SERVICE_ROLE_KEY` server-only; `lib/supabase/admin.ts` uses `import "server-only"`.
-- Social tokens encrypted + never sent to client (column grants in `0009_rls_policies.sql`).
+- Social tokens encrypted + never sent to client (column grants in `0009_rls_policies.sql`). Refresh tokens live in the dedicated `refresh_token_encrypted` column — never in `metadata` (which RLS grants clients `select` on).
 - Every publish path verifies ownership + writes an audit log.
 - No `fs`/`ffmpeg` in `app/api/**` (real render = external worker). Enforced by grep in CI/review.
 - DB trigger blocks compliance-`fail` variants from `publish_queue`.
@@ -43,6 +43,7 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - `/api/cron/{publish,ingest,refresh-tokens}` — protected by `CRON_SECRET` (`authorizeCron` in `lib/cron.ts`); scheduled in `vercel.json`.
 - Publish core is shared: `lib/publish.ts::executePublish` is called by both the `publishNow` action and the publish cron. Cron uses the service-role admin client and scopes by `job.workspace_id`.
 - `lib/meta.ts` insights (`facebookPostInsights` / `instagramMediaInsights`) feed `analytics_metrics` (source=`api`) via the ingest cron.
+- TikTok: `hasPublishScope` gates the OAuth callback (user can deny `video.publish`); `publishVideo` requires `privacy_level` (fetched via `creatorInfo.privacyLevelOptions`, defaults to `TIKTOK_DEFAULT_PRIVACY_LEVEL` or `SELF_ONLY`); refresh cron rotates both access + refresh tokens (TikTok returns a new refresh_token on every refresh).
 
 ## Migrations
 `supabase/migrations/0001…0013`. Every business table has `workspace_id` + RLS via

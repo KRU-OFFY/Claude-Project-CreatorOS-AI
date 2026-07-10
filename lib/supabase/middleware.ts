@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { env, isSupabaseConfigured } from "@/lib/env";
 
-const PUBLIC_PATHS = ["/login", "/setup"];
+const PUBLIC_PATHS = ["/login", "/setup", "/invite"];
 
 function isPublicPath(pathname: string): boolean {
   // API routes self-authorize (session check, CRON_SECRET, webhook signature,
