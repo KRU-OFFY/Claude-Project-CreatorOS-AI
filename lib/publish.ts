@@ -3,6 +3,7 @@ import "server-only";
 import { getMetaConnection, getConnection } from "@/lib/connections";
 import { publishFacebook, publishInstagram } from "@/lib/meta";
 import { publishVideo as publishTikTokVideo } from "@/lib/tiktok";
+import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
 
 export interface PublishJob {
   workspace_id: string;
@@ -52,6 +53,18 @@ export async function executePublish(
       if (!variant.media_url) return { error: "TikTok ต้องมีวิดีโอ (media_url)" };
       const publishId = await publishTikTokVideo(conn.token, caption, variant.media_url);
       return { publishedUrl: `tiktok:publish/${publishId}` };
+    }
+    if (job.platform === "youtube") {
+      const conn = await getConnection(job.workspace_id, "youtube");
+      if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี YouTube" };
+      if (!variant.media_url) return { error: "YouTube ต้องมีวิดีโอ (media_url)" };
+      // Default privacy is "private" (safest — surfaces on the creator's
+      // studio but not to viewers). Ops can override via env when they've
+      // verified the app + channel.
+      const privacy =
+        (process.env.YOUTUBE_DEFAULT_PRIVACY as "private" | "unlisted" | "public") || "private";
+      const videoId = await publishYouTubeVideo(conn.token, caption, variant.media_url, privacy);
+      return { publishedUrl: `https://youtube.com/watch?v=${videoId}` };
     }
     return { error: "connector สำหรับแพลตฟอร์มนี้ยังไม่พร้อม (ใช้ copy-to-post)" };
   } catch (e) {
