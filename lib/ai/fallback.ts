@@ -70,16 +70,60 @@ export function rewriteForCompliance(input: { caption: string }): string {
 export function adviseNextCycle(summary: {
   byPlatform: { platform: string; views: number; clicks: number; revenue: number }[];
   topProducts: { name: string; revenue: number }[];
+  trends?: import("@/lib/analytics/trends").TrendSummary;
 }): AdvisorRecommendation[] {
   const recs: AdvisorRecommendation[] = [];
-  const best = [...summary.byPlatform].sort((a, b) => b.revenue - a.revenue)[0];
-  if (best) {
-    recs.push({
-      topic: "แพลตฟอร์ม",
-      recommendation: `${best.platform} ทำรายได้ดีที่สุด — เพิ่มความถี่โพสต์บนช่องนี้ในรอบถัดไป`,
-      priority: "high",
-    });
+  const trends = summary.trends;
+
+  // Trend-grounded lead when we actually have signal — otherwise fall back
+  // to the generic best-practice advice that's usable in demo mode.
+  if (trends?.hasSignal) {
+    if (trends.revenueTrendPct >= 15) {
+      recs.push({
+        topic: "โมเมนตัม",
+        recommendation: `รายได้ ${trends.days} วันล่าสุดพุ่งขึ้น +${trends.revenueTrendPct}% — เร่งความถี่โพสต์และเพิ่มงบขยาย reach ทันที (คาดการณ์ 7 วันหน้า ~${trends.forecast7dRevenue.toLocaleString()} บาท)`,
+        priority: "high",
+      });
+    } else if (trends.revenueTrendPct <= -15) {
+      // Math.abs prevents "รายได้ตกลง -20%" (double negative). Thai reads
+      // "รายได้ตกลง 20%" as the natural phrasing.
+      recs.push({
+        topic: "แจ้งเตือน",
+        recommendation: `รายได้ตกลง ${Math.abs(trends.revenueTrendPct)}% ใน ${trends.days} วัน — หา A/B ตัวใหม่ ทบทวนสินค้า/มุมขายก่อนเสียโมเมนตัม`,
+        priority: "high",
+      });
+    } else {
+      recs.push({
+        topic: "ภาพรวม",
+        recommendation: `รายได้ ${trends.days} วันเสมอตัว (${trends.revenueTrendPct >= 0 ? "+" : ""}${trends.revenueTrendPct}%) — คาดการณ์สัปดาห์หน้า ~${trends.forecast7dRevenue.toLocaleString()} บาท ลอง test มุมใหม่เพื่อผลักดันโค้งเติบโต`,
+        priority: "medium",
+      });
+    }
+    if (trends.topPlatform) {
+      recs.push({
+        topic: "แพลตฟอร์ม",
+        recommendation: `${trends.topPlatform} ครอบครอง ${trends.topPlatformShare}% ของรายได้ — ทุ่มคอนเทนต์เพิ่มบนช่องนี้ก่อน ค่อยกระจายรอบถัดไป`,
+        priority: "high",
+      });
+    }
+  } else {
+    const best = [...summary.byPlatform].sort((a, b) => b.revenue - a.revenue)[0];
+    if (best) {
+      recs.push({
+        topic: "แพลตฟอร์ม",
+        recommendation: `${best.platform} ทำรายได้ดีที่สุด — เพิ่มความถี่โพสต์บนช่องนี้ในรอบถัดไป`,
+        priority: "high",
+      });
+    } else {
+      recs.push({
+        topic: "เริ่มต้น",
+        recommendation:
+          "ยังไม่มีข้อมูลผลงาน — เริ่มโพสต์บน Facebook/TikTok แล้วรอ ingest cron เก็บ metrics 3-7 วัน AI จะแนะนำเชิงลึกได้",
+        priority: "medium",
+      });
+    }
   }
+
   const topProduct = summary.topProducts[0];
   if (topProduct) {
     recs.push({
@@ -90,7 +134,7 @@ export function adviseNextCycle(summary: {
   }
   recs.push({
     topic: "เวลาโพสต์",
-    recommendation: "ทดลองโพสต์ช่วง 19:00–21:00 ซึ่งมักมี engagement สูง",
+    recommendation: "ทดลองโพสต์ช่วง 19:00–21:00 ซึ่งมักมี engagement สูงสำหรับ FB/IG ในไทย",
     priority: "medium",
   });
   recs.push({

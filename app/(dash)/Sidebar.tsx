@@ -4,15 +4,26 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
+import { switchWorkspace } from "./actions";
 
 const groups = ["ภาพรวม", "เวิร์กโฟลว์", "ผลลัพธ์", "ระบบ"];
 
+interface MembershipItem {
+  workspaceId: string;
+  workspaceName: string;
+  role: string;
+}
+
 export function Sidebar({
   workspaceName,
+  activeWorkspaceId,
+  memberships,
   email,
   role,
 }: {
   workspaceName: string;
+  activeWorkspaceId: string;
+  memberships: MembershipItem[];
   email: string;
   role: string;
 }) {
@@ -41,6 +52,28 @@ export function Sidebar({
         <div className="hidden px-5 py-5 md:block">
           <Brand />
         </div>
+
+        {memberships.length > 1 && (
+          <div className="px-4 pb-2 md:pb-3">
+            <form action={switchWorkspace}>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-black/40">
+                เวิร์กสเปซ
+              </label>
+              <select
+                name="workspace_id"
+                defaultValue={activeWorkspaceId}
+                onChange={(e) => e.currentTarget.form?.requestSubmit()}
+                className="w-full rounded-lg border border-black/15 bg-white px-2 py-1.5 text-sm"
+              >
+                {memberships.map((m) => (
+                  <option key={m.workspaceId} value={m.workspaceId}>
+                    {m.workspaceName || "(ไม่มีชื่อ)"} · {m.role}
+                  </option>
+                ))}
+              </select>
+            </form>
+          </div>
+        )}
 
         <nav className="px-3 pb-4">
           {groups.map((g) => (

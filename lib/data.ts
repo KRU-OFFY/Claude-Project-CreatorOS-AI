@@ -82,6 +82,31 @@ export async function listAnalytics() {
   return data ?? [];
 }
 
+// Last-N-days window used by the trend helpers (Advisor + Forecast).
+// Server-side date filter keeps the payload small for high-volume workspaces.
+//
+// The window is anchored to today's Bangkok date so the SQL boundary
+// matches the client-side bucket boundary — otherwise a query issued
+// shortly after midnight Thailand time could miss the current day.
+export async function listAnalyticsWindow(days: number) {
+  const s = await scoped();
+  if (!s) return [];
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }).format(new Date());
+  const todayMs = new Date(todayStr + "T00:00:00Z").getTime();
+  const sinceIso = new Date(todayMs - (days - 1) * 864e5)
+    .toISOString()
+    .slice(0, 10);
+  const { data } = await s.supabase
+    .from("analytics_metrics")
+    .select("platform, metric_date, views, reach, engagement, clicks, orders, revenue, commission")
+    .eq("workspace_id", s.ws)
+    .gte("metric_date", sinceIso)
+    .order("metric_date", { ascending: true });
+  return data ?? [];
+}
+
 export async function listComplianceItems() {
   const s = await scoped();
   if (!s) return [];
@@ -126,5 +151,33 @@ export async function listAuditLogs() {
     .eq("workspace_id", s.ws)
     .order("created_at", { ascending: false })
     .limit(20);
+  return data ?? [];
+}
+
+// Team members with profile info (Team page).
+export async function listWorkspaceMembers() {
+  const s = await scoped();
+  if (!s) return [];
+  const { data } = await s.supabase
+    .from("workspace_members")
+    .select("id, user_id, role, created_at, profiles(email, full_name)")
+    .eq("workspace_id", s.ws)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+// Pending (not accepted / not revoked / not expired) invites for the Team page.
+export async function listPendingInvitations() {
+  const s = await scoped();
+  if (!s) return [];
+  const nowIso = new Date().toISOString();
+  const { data } = await s.supabase
+    .from("workspace_invitations")
+    .select("id, email, role, token, expires_at, created_at")
+    .eq("workspace_id", s.ws)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false });
   return data ?? [];
 }
