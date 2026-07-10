@@ -8,6 +8,16 @@ import { scoreProduct, generateBrief, generateVariant, rewriteForCompliance } fr
 import { computeScore } from "@/lib/scoring/product-score";
 import { checkCompliance } from "@/lib/compliance";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/platforms";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  generateInviteToken,
+  isInvitableRole,
+  normalizeEmail,
+  sendInviteEmail,
+  inviteUrl,
+  TEAM_ACTIONS,
+} from "@/lib/team";
+import { headers, cookies } from "next/headers";
 
 async function ctxAndClient() {
   const supabase = await createClient();
@@ -425,4 +435,220 @@ export async function recordMetrics(formData: FormData) {
   });
   revalidatePath("/analytics");
   revalidatePath("/revenue-forecast");
+}
+
+// ===== Track F — Team management =====
+
+// Every team mutation must be initiated by the workspace owner. RLS also
+// blocks non-owner writes; checking here gives a clean error message.
+async function ownerCtx() {
+  const { supabase, ctx } = await ctxAndClient();
+  if (ctx.role !== "owner") throw new Error("เฉพาะ owner เท่านั้นที่จัดการทีมได้");
+  return { supabase, ctx };
+}
+
+export async function inviteMember(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const role = String(formData.get("role") ?? "editor");
+  if (!email || !email.includes("@")) throw new Error("อีเมลไม่ถูกต้อง");
+  if (!isInvitableRole(role)) throw new Error("บทบาทไม่ถูกต้อง");
+
+  const token = generateInviteToken();
+  const { error } = await supabase.from("workspace_invitations").insert({
+    workspace_id: ctx.workspaceId,
+    email,
+    role,
+    token,
+    invited_by: ctx.userId,
+  });
+  if (error) throw new Error(error.message);
+
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  const url = inviteUrl({ origin, token });
+  const sent = await sendInviteEmail({
+    to: email,
+    inviterName: ctx.email,
+    workspaceName: ctx.workspaceName,
+    url,
+  });
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.invite,
+    entityType: "workspace_invitations",
+    metadata: { email, role, delivered: sent.delivered, via: sent.via },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function revokeInvite(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const id = String(formData.get("invite_id") ?? "");
+  if (!id) return;
+  await supabase
+    .from("workspace_invitations")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("workspace_id", ctx.workspaceId);
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.inviteRevoke,
+    entityType: "workspace_invitations",
+    entityId: id,
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function changeMemberRole(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  const role = String(formData.get("role") ?? "");
+  if (!memberId || !isInvitableRole(role)) throw new Error("ข้อมูลไม่ถูกต้อง");
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id, role")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) throw new Error("ไม่พบสมาชิก");
+  // Enforce the "always at least one owner" invariant. Owner cannot demote
+  // themselves via this action — must use transferOwnership (atomic swap).
+  if (target.user_id === ctx.userId && role !== "owner") {
+    throw new Error("owner ไม่สามารถลดบทบาทตัวเองได้ — ใช้ 'โอนความเป็นเจ้าของ' แทน");
+  }
+  // Refuse to create a second owner via this path: transferOwnership is the
+  // audited swap. Keeps a single accountable party per workspace.
+  if (role === "owner" && target.user_id !== ctx.userId) {
+    throw new Error("ต้องใช้ 'โอนความเป็นเจ้าของ' เพื่อตั้ง owner ใหม่");
+  }
+
+  await supabase
+    .from("workspace_members")
+    .update({ role })
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.roleChange,
+    entityType: "workspace_members",
+    entityId: memberId,
+    metadata: { role, target_user: target.user_id },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function removeMember(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  if (!memberId) return;
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id, role")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) return;
+  if (target.user_id === ctx.userId) throw new Error("owner ลบตัวเองไม่ได้");
+
+  await supabase
+    .from("workspace_members")
+    .delete()
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.memberRemove,
+    entityType: "workspace_members",
+    entityId: memberId,
+    metadata: { target_user: target.user_id, prior_role: target.role },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function transferOwnership(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  if (!memberId) return;
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) throw new Error("ไม่พบสมาชิก");
+  if (target.user_id === ctx.userId) throw new Error("คุณคือ owner อยู่แล้ว");
+
+  // Owner swap needs 3 writes. Per-row RLS makes this fragile — the admin
+  // client runs them back-to-back so a half-applied transfer never leaves
+  // the workspace ownerless.
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Supabase admin client ยังไม่ตั้งค่า");
+
+  await admin
+    .from("workspace_members")
+    .update({ role: "editor" })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("user_id", ctx.userId);
+  await admin
+    .from("workspace_members")
+    .update({ role: "owner" })
+    .eq("workspace_id", ctx.workspaceId)
+    .eq("user_id", target.user_id);
+  await admin
+    .from("workspaces")
+    .update({ owner_id: target.user_id })
+    .eq("id", ctx.workspaceId);
+
+  await logAudit(admin, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.ownerTransfer,
+    entityType: "workspaces",
+    entityId: ctx.workspaceId,
+    metadata: { new_owner: target.user_id, previous_owner: ctx.userId },
+  });
+  revalidatePath("/settings/team");
+  revalidatePath("/settings");
+}
+
+// Set the active workspace for the caller. Stored in a cookie because Server
+// Components read cookies with no round trip; workspace.ts falls back to the
+// first membership if the cookie is missing or points to a workspace the
+// caller no longer belongs to.
+export async function switchWorkspace(formData: FormData) {
+  const wsId = String(formData.get("workspace_id") ?? "");
+  if (!wsId) return;
+  const { supabase } = await ctxAndClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: member } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .eq("workspace_id", wsId)
+    .maybeSingle();
+  if (!member) throw new Error("คุณไม่ได้เป็นสมาชิกของเวิร์กสเปซนี้");
+
+  const c = await cookies();
+  c.set("active_workspace_id", wsId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/", "layout");
 }
