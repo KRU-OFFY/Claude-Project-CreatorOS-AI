@@ -81,17 +81,18 @@ async function handle(request: Request) {
     }
     try {
       const t = await youtubeRefresh(rt);
-      await admin
-        .from("channel_connections")
-        .update({
-          access_token_encrypted: encryptToken(t.token),
-          // Google may not return a new refresh_token — refreshAccessToken
-          // preserves the original in that case.
-          refresh_token_encrypted: t.refreshToken ? encryptToken(t.refreshToken) : null,
-          expires_at: t.expiresAt,
-          status: "connected",
-        })
-        .eq("id", c.id);
+      // Google usually returns the same refresh_token, and
+      // refreshAccessToken already preserves the original if omitted.
+      // Still, only write the column when we actually have a value so a
+      // null can never nuke the stored token via this path (belt-and-
+      // braces against upstream refactors).
+      const update: Record<string, unknown> = {
+        access_token_encrypted: encryptToken(t.token),
+        expires_at: t.expiresAt,
+        status: "connected",
+      };
+      if (t.refreshToken) update.refresh_token_encrypted = encryptToken(t.refreshToken);
+      await admin.from("channel_connections").update(update).eq("id", c.id);
       refreshed++;
     } catch {
       const expired = c.expires_at ? new Date(c.expires_at as string) <= new Date() : false;

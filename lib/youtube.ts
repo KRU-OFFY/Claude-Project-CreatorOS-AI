@@ -174,14 +174,16 @@ export async function publishVideo(
     `Content-Type: ${media.headers.get("content-type") ?? "video/*"}${CRLF}${CRLF}`;
   const tail = `${CRLF}--${boundary}--${CRLF}`;
 
-  const bodyBytes = new Uint8Array(await media.arrayBuffer());
+  // Compose the multipart body via Blob so the video bytes never sit in a
+  // contiguous JS buffer — fetch (Node 18+) streams a Blob body natively.
+  // The old arrayBuffer() + Uint8Array copy path could easily OOM a
+  // 512MB / 1GB serverless worker on any non-trivial video.
   const encoder = new TextEncoder();
-  const headBytes = encoder.encode(head);
-  const tailBytes = encoder.encode(tail);
-  const combined = new Uint8Array(headBytes.length + bodyBytes.length + tailBytes.length);
-  combined.set(headBytes, 0);
-  combined.set(bodyBytes, headBytes.length);
-  combined.set(tailBytes, headBytes.length + bodyBytes.length);
+  const combined = new Blob([
+    encoder.encode(head),
+    await media.blob(),
+    encoder.encode(tail),
+  ]);
 
   const uploadRes = await fetch(`${UPLOAD}?uploadType=multipart&part=snippet,status`, {
     method: "POST",
