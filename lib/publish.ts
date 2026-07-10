@@ -2,7 +2,7 @@ import "server-only";
 
 import { getMetaConnection, getConnection } from "@/lib/connections";
 import { publishFacebook, publishInstagram } from "@/lib/meta";
-import { publishVideo as publishTikTokVideo } from "@/lib/tiktok";
+import { publishVideo as publishTikTokVideo, creatorInfo as tiktokCreatorInfo } from "@/lib/tiktok";
 
 export interface PublishJob {
   workspace_id: string;
@@ -50,7 +50,23 @@ export async function executePublish(
       const conn = await getConnection(job.workspace_id, "tiktok");
       if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี TikTok" };
       if (!variant.media_url) return { error: "TikTok ต้องมีวิดีโอ (media_url)" };
-      const publishId = await publishTikTokVideo(conn.token, caption, variant.media_url);
+      // Direct Post REQUIRES privacy_level. Ask TikTok what the creator+app
+      // combo is currently allowed to post as (unaudited apps typically get
+      // SELF_ONLY only). Prefer the env-configured default if it's supported,
+      // otherwise fall back to the first allowed value — never guess.
+      const info = await tiktokCreatorInfo(conn.token);
+      const allowed = info?.privacyLevelOptions ?? [];
+      const preferred = process.env.TIKTOK_DEFAULT_PRIVACY_LEVEL || "SELF_ONLY";
+      const privacyLevel = allowed.includes(preferred) ? preferred : allowed[0];
+      if (!privacyLevel) {
+        return { error: "TikTok ไม่คืน privacy_level ที่ใช้ได้ — ตรวจ scope/สถานะแอป" };
+      }
+      const publishId = await publishTikTokVideo(
+        conn.token,
+        caption,
+        variant.media_url,
+        privacyLevel
+      );
       return { publishedUrl: `tiktok:publish/${publishId}` };
     }
     return { error: "connector สำหรับแพลตฟอร์มนี้ยังไม่พร้อม (ใช้ copy-to-post)" };

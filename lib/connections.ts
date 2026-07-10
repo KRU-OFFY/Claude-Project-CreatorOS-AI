@@ -27,18 +27,22 @@ export function verifyState(state: string): { workspaceId: string } | null {
 }
 
 // Persist an encrypted platform connection (server-side, bypasses RLS via admin).
-export async function saveMetaConnection(params: {
+// `refreshToken` (when provided) is stored in the dedicated encrypted column —
+// NOT in `metadata`, which RLS grants clients `select` on (see 0009).
+export async function saveConnection(params: {
   workspaceId: string;
   userId: string;
-  platform: "facebook" | "instagram";
+  platform: string;
   accountName: string;
-  pageToken: string;
+  token: string;
+  refreshToken?: string | null;
   metadata: Record<string, unknown>;
   expiresAt?: string | null;
 }): Promise<boolean> {
   const admin = createAdminClient();
   if (!admin) return false;
-  const enc = encryptToken(params.pageToken);
+  const enc = encryptToken(params.token);
+  const encRefresh = params.refreshToken ? encryptToken(params.refreshToken) : null;
   await admin
     .from("channel_connections")
     .upsert(
@@ -47,6 +51,7 @@ export async function saveMetaConnection(params: {
         platform: params.platform,
         account_name: params.accountName,
         access_token_encrypted: enc,
+        refresh_token_encrypted: encRefresh,
         status: "connected",
         metadata: params.metadata,
         connected_by: params.userId || null,
@@ -57,9 +62,31 @@ export async function saveMetaConnection(params: {
   return true;
 }
 
+// Back-compat shim for Meta call sites (unchanged public shape).
+export function saveMetaConnection(params: {
+  workspaceId: string;
+  userId: string;
+  platform: "facebook" | "instagram";
+  accountName: string;
+  pageToken: string;
+  metadata: Record<string, unknown>;
+  expiresAt?: string | null;
+}): Promise<boolean> {
+  return saveConnection({
+    workspaceId: params.workspaceId,
+    userId: params.userId,
+    platform: params.platform,
+    accountName: params.accountName,
+    token: params.pageToken,
+    metadata: params.metadata,
+    expiresAt: params.expiresAt ?? null,
+  });
+}
+
 export interface DecryptedConnection {
   accountName: string;
   token: string;
+  refreshToken: string | null;
   metadata: Record<string, unknown>;
 }
 
@@ -72,7 +99,7 @@ export async function getConnection(
   if (!admin) return null;
   const { data } = await admin
     .from("channel_connections")
-    .select("account_name, access_token_encrypted, metadata, status")
+    .select("account_name, access_token_encrypted, refresh_token_encrypted, metadata, status")
     .eq("workspace_id", workspaceId)
     .eq("platform", platform)
     .eq("status", "connected")
@@ -81,9 +108,13 @@ export async function getConnection(
   if (!data?.access_token_encrypted) return null;
   const token = decryptToken(data.access_token_encrypted);
   if (!token) return null;
+  const refreshToken = data.refresh_token_encrypted
+    ? decryptToken(data.refresh_token_encrypted)
+    : null;
   return {
     accountName: data.account_name as string,
     token,
+    refreshToken,
     metadata: (data.metadata as Record<string, unknown>) ?? {},
   };
 }
@@ -94,25 +125,4 @@ export function getMetaConnection(
   platform: "facebook" | "instagram"
 ): Promise<DecryptedConnection | null> {
   return getConnection(workspaceId, platform);
-}
-
-// Generic connection writer for any platform (encrypts the token).
-export async function saveConnection(params: {
-  workspaceId: string;
-  userId: string;
-  platform: string;
-  accountName: string;
-  token: string;
-  metadata: Record<string, unknown>;
-  expiresAt?: string | null;
-}): Promise<boolean> {
-  return saveMetaConnection({
-    workspaceId: params.workspaceId,
-    userId: params.userId,
-    platform: params.platform as "facebook" | "instagram",
-    accountName: params.accountName,
-    pageToken: params.token,
-    metadata: params.metadata,
-    expiresAt: params.expiresAt ?? null,
-  });
 }
