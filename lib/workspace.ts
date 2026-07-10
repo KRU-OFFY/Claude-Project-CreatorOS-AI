@@ -31,10 +31,19 @@ export async function getActiveContext(): Promise<ActiveContext | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: memberships } = await supabase
+  const { data: memberships, error } = await supabase
     .from("workspace_members")
     .select("workspace_id, role, workspaces(name)")
     .eq("user_id", user.id);
+
+  // A DB failure here isn't "no memberships" — it's unknown state. Falling
+  // through to the zero-membership branch would silently render pages as
+  // viewer-only when the user might actually be an owner. Surface null so
+  // the layout falls back to /login instead of showing a broken shell.
+  if (error) {
+    console.error("[workspace] getActiveContext memberships query failed:", error);
+    return null;
+  }
 
   // Supabase types nested selects as arrays even for foreign-key singletons;
   // narrow to the shape we actually receive at runtime.

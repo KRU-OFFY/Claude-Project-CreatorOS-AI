@@ -216,7 +216,7 @@ export default async function TeamPage({
                         href={`/invite/${encodeURIComponent(inv.token)}`}
                         className="text-xs text-brand underline"
                       >
-                        คัดลอกลิงก์
+                        เปิดลิงก์คำเชิญ
                       </a>
                     </Td>
                     <Td>

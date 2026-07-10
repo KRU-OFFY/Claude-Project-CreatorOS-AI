@@ -488,11 +488,12 @@ export async function revokeInvite(formData: FormData) {
   const { supabase, ctx } = await ownerCtx();
   const id = String(formData.get("invite_id") ?? "");
   if (!id) return;
-  await supabase
+  const { error } = await supabase
     .from("workspace_invitations")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
     .eq("workspace_id", ctx.workspaceId);
+  if (error) throw new Error(error.message);
   await logAudit(supabase, {
     workspaceId: ctx.workspaceId,
     userId: ctx.userId,
@@ -527,11 +528,12 @@ export async function changeMemberRole(formData: FormData) {
     throw new Error("ต้องใช้ 'โอนความเป็นเจ้าของ' เพื่อตั้ง owner ใหม่");
   }
 
-  await supabase
+  const { error: updateError } = await supabase
     .from("workspace_members")
     .update({ role })
     .eq("id", memberId)
     .eq("workspace_id", ctx.workspaceId);
+  if (updateError) throw new Error(updateError.message);
 
   await logAudit(supabase, {
     workspaceId: ctx.workspaceId,
@@ -558,11 +560,12 @@ export async function removeMember(formData: FormData) {
   if (!target) return;
   if (target.user_id === ctx.userId) throw new Error("owner ลบตัวเองไม่ได้");
 
-  await supabase
+  const { error: delError } = await supabase
     .from("workspace_members")
     .delete()
     .eq("id", memberId)
     .eq("workspace_id", ctx.workspaceId);
+  if (delError) throw new Error(delError.message);
 
   await logAudit(supabase, {
     workspaceId: ctx.workspaceId,
@@ -589,26 +592,19 @@ export async function transferOwnership(formData: FormData) {
   if (!target) throw new Error("ไม่พบสมาชิก");
   if (target.user_id === ctx.userId) throw new Error("คุณคือ owner อยู่แล้ว");
 
-  // Owner swap needs 3 writes. Per-row RLS makes this fragile — the admin
-  // client runs them back-to-back so a half-applied transfer never leaves
-  // the workspace ownerless.
+  // Owner swap is 3 writes: demote current owner, promote new owner, flip
+  // workspaces.owner_id. If they ran as separate HTTP calls, a failure
+  // between them would leave the workspace ownerless. Migration 0016
+  // wraps them in a Postgres function so they land as one transaction.
   const admin = createAdminClient();
   if (!admin) throw new Error("Supabase admin client ยังไม่ตั้งค่า");
 
-  await admin
-    .from("workspace_members")
-    .update({ role: "editor" })
-    .eq("workspace_id", ctx.workspaceId)
-    .eq("user_id", ctx.userId);
-  await admin
-    .from("workspace_members")
-    .update({ role: "owner" })
-    .eq("workspace_id", ctx.workspaceId)
-    .eq("user_id", target.user_id);
-  await admin
-    .from("workspaces")
-    .update({ owner_id: target.user_id })
-    .eq("id", ctx.workspaceId);
+  const { error: rpcError } = await admin.rpc("transfer_workspace_ownership", {
+    p_workspace_id: ctx.workspaceId,
+    p_current_owner_id: ctx.userId,
+    p_new_owner_id: target.user_id,
+  });
+  if (rpcError) throw new Error(rpcError.message);
 
   await logAudit(admin, {
     workspaceId: ctx.workspaceId,

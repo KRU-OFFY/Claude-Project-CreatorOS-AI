@@ -35,29 +35,22 @@ export async function acceptInvite(formData: FormData) {
     throw new Error("อีเมลที่เข้าสู่ระบบไม่ตรงกับคำเชิญ");
   }
 
-  // Atomic claim: only the first click flips accepted_at → null becomes now().
-  // .select() returns the row only if the update actually matched, so a
-  // concurrent second click sees zero rows and short-circuits.
-  const { data: claimed } = await admin
-    .from("workspace_invitations")
-    .update({ accepted_at: new Date().toISOString(), accepted_by: user.id })
-    .eq("id", invite.id)
-    .is("accepted_at", null)
-    .select("id");
-  if (!claimed || claimed.length === 0) redirect("/dashboard");
-
-  // Upsert the membership. If the user is already a member (e.g. re-invited
-  // to change role) we bump their role to the invite's role.
-  await admin
-    .from("workspace_members")
-    .upsert(
-      {
-        workspace_id: invite.workspace_id,
-        user_id: user.id,
-        role: invite.role,
-      },
-      { onConflict: "workspace_id,user_id" }
-    );
+  // Two writes need to land as one transaction: mark the invite consumed AND
+  // upsert the membership. A half-applied accept would lock the invitee out
+  // because the invite is marked accepted but they aren't a member.
+  // Migration 0016 wraps them in a Postgres function.
+  const { error: rpcError } = await admin.rpc("accept_workspace_invite", {
+    p_invite_id: invite.id,
+    p_user_id: user.id,
+  });
+  if (rpcError) {
+    // Someone else already claimed it (race) → send to dashboard silently.
+    // Any other error (constraint / connection) surfaces so the user sees it.
+    if (rpcError.message.includes("not accepting new members")) {
+      redirect("/dashboard");
+    }
+    throw new Error(rpcError.message);
+  }
 
   await logAudit(admin, {
     workspaceId: invite.workspace_id,
