@@ -128,3 +128,31 @@ export async function listAuditLogs() {
     .limit(20);
   return data ?? [];
 }
+
+// Team members with profile info (Team page).
+export async function listWorkspaceMembers() {
+  const s = await scoped();
+  if (!s) return [];
+  const { data } = await s.supabase
+    .from("workspace_members")
+    .select("id, user_id, role, created_at, profiles(email, full_name)")
+    .eq("workspace_id", s.ws)
+    .order("created_at", { ascending: true });
+  return data ?? [];
+}
+
+// Pending (not accepted / not revoked / not expired) invites for the Team page.
+export async function listPendingInvitations() {
+  const s = await scoped();
+  if (!s) return [];
+  const nowIso = new Date().toISOString();
+  const { data } = await s.supabase
+    .from("workspace_invitations")
+    .select("id, email, role, token, expires_at, created_at")
+    .eq("workspace_id", s.ws)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}

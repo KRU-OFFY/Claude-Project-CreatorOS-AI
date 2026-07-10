@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getActiveContext } from "@/lib/workspace";
+import { getActiveContext, listMemberships } from "@/lib/workspace";
 import { isSupabaseConfigured } from "@/lib/env";
 import { Sidebar } from "./Sidebar";
 
@@ -12,13 +12,18 @@ export default async function DashLayout({
 }) {
   if (!isSupabaseConfigured()) redirect("/setup");
 
-  const ctx = await getActiveContext();
+  const [ctx, memberships] = await Promise.all([
+    getActiveContext(),
+    listMemberships(),
+  ]);
   if (!ctx) redirect("/login");
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar
         workspaceName={ctx.workspaceName}
+        activeWorkspaceId={ctx.workspaceId}
+        memberships={memberships}
         email={ctx.email}
         role={ctx.role}
       />
