@@ -1,14 +1,16 @@
 import { PageHeader, Card, StatusBadge, EmptyState } from "@/components/ui";
 import { listCampaigns, listContentVariants } from "@/lib/data";
-import { generateContentForCampaign } from "../actions";
+import { generateContentForCampaign, renderVariantMedia } from "../actions";
 import { platformLabel } from "@/lib/platforms";
 import { aiMode } from "@/lib/ai";
+import { renderConfigured } from "@/lib/render";
 
 export default async function ContentStudioPage() {
   const [campaigns, variants] = await Promise.all([
     listCampaigns(),
     listContentVariants(),
   ]);
+  const renderReady = renderConfigured();
 
   return (
     <div>
@@ -64,6 +66,21 @@ export default async function ContentStudioPage() {
                     </p>
                   )}
                   {v.cta && <p className="mt-1 text-xs text-black/50">CTA: {v.cta}</p>}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {renderReady ? (
+                      <form action={renderVariantMedia}>
+                        <input type="hidden" name="variant_id" value={v.id} />
+                        <button className="rounded-lg border border-black/15 px-3 py-1 text-xs hover:bg-black/5">
+                          🎬 สั่ง render วิดีโอ
+                        </button>
+                      </form>
+                    ) : (
+                      <span className="text-xs text-black/40">
+                        (render worker ยังไม่ตั้งค่า —
+                        ตั้ง RENDER_WORKER_URL/RENDER_WORKER_SECRET เพื่อเปิดปุ่มนี้)
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

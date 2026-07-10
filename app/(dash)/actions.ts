@@ -17,6 +17,12 @@ import {
   inviteUrl,
   TEAM_ACTIONS,
 } from "@/lib/team";
+import {
+  enqueueRender,
+  generateNonce,
+  renderConfigured,
+  type RenderJobPayload,
+} from "@/lib/render";
 import { headers, cookies } from "next/headers";
 
 async function ctxAndClient() {
@@ -682,4 +688,104 @@ export async function switchWorkspace(formData: FormData) {
     maxAge: 60 * 60 * 24 * 365,
   });
   revalidatePath("/", "layout");
+}
+
+// Track C — enqueue a media render for a content_variant via the external
+// render worker. Creates a render_jobs row, POSTs to the worker with an HMAC,
+// and lets the worker call back into /api/render/callback when done.
+export async function renderVariantMedia(formData: FormData) {
+  const { supabase, ctx } = await ctxAndClient();
+  const variantId = String(formData.get("variant_id") ?? "");
+  if (!variantId) return;
+  if (!renderConfigured()) {
+    throw new Error("ยังไม่ตั้งค่า RENDER_WORKER_URL/RENDER_WORKER_SECRET");
+  }
+
+  const { data: v } = await supabase
+    .from("content_variants")
+    .select("id, platform, variant_body, hashtags, cta, media_url")
+    .eq("id", variantId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!v) throw new Error("ไม่พบ variant");
+
+  const nonce = generateNonce();
+  const { data: job, error: jobErr } = await supabase
+    .from("render_jobs")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      content_variant_id: variantId,
+      requested_by: ctx.userId,
+      status: "queued",
+      callback_nonce: nonce,
+    })
+    .select("id")
+    .single();
+  if (jobErr || !job) {
+    throw new Error(
+      `สร้าง render_job ไม่สำเร็จ: ${jobErr?.message ?? "unknown error"}`
+    );
+  }
+
+  // Trusted origin comes from APP_URL (set at deploy time), NOT from the
+  // request's Host / X-Forwarded-Proto headers. Otherwise a spoofed Host
+  // could point the worker's callback (which carries jobId + nonce +
+  // signature + mediaUrl) at an attacker-controlled host. Fall back to the
+  // request headers only when APP_URL isn't set (dev / self-hosted).
+  const configuredOrigin = (process.env.APP_URL ?? "").replace(/\/+$/, "");
+  const origin = configuredOrigin
+    ? configuredOrigin
+    : await (async () => {
+        const h = await headers();
+        return `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+      })();
+
+  // Pick a template based on the target platform's aspect ratio bias.
+  // TikTok / Instagram Reels want vertical; Facebook / YouTube tolerate
+  // square (their card view crops it acceptably).
+  const platform = String(v.platform ?? "");
+  const template: RenderJobPayload["template"] =
+    platform === "tiktok" || platform === "shopee_live" || platform === "shopee_video"
+      ? "vertical"
+      : platform === "instagram"
+        ? "story"
+        : "square";
+
+  const payload: RenderJobPayload = {
+    jobId: job.id as string,
+    workspaceId: ctx.workspaceId,
+    contentVariantId: variantId,
+    callbackNonce: nonce,
+    callbackUrl: `${origin}/api/render/callback`,
+    template,
+    caption: (v.variant_body as string) ?? "",
+    hashtags: (v.hashtags as string[]) ?? [],
+    cta: (v.cta as string) ?? null,
+    sourceMediaUrl: (v.media_url as string) ?? null,
+  };
+
+  const result = await enqueueRender(payload);
+  if (!result.ok) {
+    await supabase
+      .from("render_jobs")
+      .update({ status: "failed", error_message: result.error ?? "enqueue failed" })
+      .eq("id", job.id);
+    throw new Error(`worker rejected: ${result.error ?? result.status}`);
+  }
+
+  await supabase
+    .from("render_jobs")
+    .update({ status: "rendering" })
+    .eq("id", job.id);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: "render.enqueue",
+    entityType: "render_jobs",
+    entityId: job.id as string,
+    metadata: { platform, template },
+  });
+
+  revalidatePath("/content-studio");
 }
