@@ -37,6 +37,10 @@ export interface TikTokToken {
   refreshToken: string | null;
   openId: string;
   expiresAt: string | null;
+  // Scope actually granted by the user (comma-separated). Callback verifies
+  // that `video.publish` is present before saving the connection — otherwise
+  // publish attempts fail at post time with a confusing error.
+  scope: string;
 }
 
 async function postForm<T>(url: string, body: Record<string, string>): Promise<T> {
@@ -57,6 +61,7 @@ interface TokenResponse {
   refresh_token?: string;
   open_id: string;
   expires_in?: number;
+  scope?: string;
 }
 
 function toToken(r: TokenResponse): TikTokToken {
@@ -68,6 +73,7 @@ function toToken(r: TokenResponse): TikTokToken {
       typeof r.expires_in === "number"
         ? new Date(Date.now() + r.expires_in * 1000).toISOString()
         : null,
+    scope: r.scope ?? "",
   };
 }
 
@@ -111,15 +117,24 @@ async function postJson<T>(path: string, token: string, body: unknown): Promise<
   return json as T;
 }
 
+export interface CreatorInfo {
+  nickname?: string;
+  // Which privacy levels this creator+app combination is allowed to post as.
+  // Direct Post requires this value in the payload — sending an unsupported
+  // one is rejected. Unaudited apps typically only get SELF_ONLY.
+  privacyLevelOptions: string[];
+}
+
 // Validate the token by querying creator info (also confirms posting eligibility).
-export async function creatorInfo(token: string): Promise<{ nickname?: string } | null> {
+export async function creatorInfo(token: string): Promise<CreatorInfo | null> {
   try {
-    const json = await postJson<{ data?: { creator_nickname?: string } }>(
-      "post/publish/creator_info/query/",
-      token,
-      {}
-    );
-    return { nickname: json.data?.creator_nickname };
+    const json = await postJson<{
+      data?: { creator_nickname?: string; privacy_level_options?: string[] };
+    }>("post/publish/creator_info/query/", token, {});
+    return {
+      nickname: json.data?.creator_nickname,
+      privacyLevelOptions: json.data?.privacy_level_options ?? [],
+    };
   } catch {
     return null;
   }
@@ -127,20 +142,38 @@ export async function creatorInfo(token: string): Promise<{ nickname?: string } 
 
 // Publish a video by URL (PULL_FROM_URL). Returns the TikTok publish_id.
 // The video URL host must be verified in the TikTok developer portal.
+//
+// `privacyLevel` is REQUIRED by the Direct Post API — TikTok rejects payloads
+// without it. Callers should pass a value returned by `creatorInfo` (unaudited
+// apps only get SELF_ONLY, which lands in the creator's private drafts).
 export async function publishVideo(
   token: string,
   caption: string,
-  videoUrl: string
+  videoUrl: string,
+  privacyLevel: string
 ): Promise<string> {
   const json = await postJson<{ data?: { publish_id?: string } }>(
     "post/publish/video/init/",
     token,
     {
-      post_info: { title: caption.slice(0, 2200) },
+      post_info: {
+        title: caption.slice(0, 2200),
+        privacy_level: privacyLevel,
+      },
       source_info: { source: "PULL_FROM_URL", video_url: videoUrl },
     }
   );
   const id = json.data?.publish_id;
   if (!id) throw new Error("TikTok did not return a publish_id");
   return id;
+}
+
+// True when the granted scope actually includes `video.publish`. TikTok lets
+// the user deny individual scopes on the consent screen — without this one,
+// the connection is unusable for publishing.
+export function hasPublishScope(scope: string): boolean {
+  return scope
+    .split(",")
+    .map((s) => s.trim())
+    .includes("video.publish");
 }

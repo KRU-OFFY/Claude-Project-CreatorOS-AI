@@ -8,6 +8,22 @@ import { scoreProduct, generateBrief, generateVariant, rewriteForCompliance } fr
 import { computeScore } from "@/lib/scoring/product-score";
 import { checkCompliance } from "@/lib/compliance";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/platforms";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  generateInviteToken,
+  isInvitableRole,
+  normalizeEmail,
+  sendInviteEmail,
+  inviteUrl,
+  TEAM_ACTIONS,
+} from "@/lib/team";
+import {
+  enqueueRender,
+  generateNonce,
+  renderConfigured,
+  type RenderJobPayload,
+} from "@/lib/render";
+import { headers, cookies } from "next/headers";
 
 async function ctxAndClient() {
   const supabase = await createClient();
@@ -23,6 +39,12 @@ export async function createProduct(formData: FormData) {
   const price = Number(formData.get("price")) || null;
   const commission_rate = Number(formData.get("commission_rate")) || null;
   const source_platform = String(formData.get("source_platform") ?? "manual");
+  // Category drives Thai regulatory rule packs (health / cosmetics /
+  // financial). Stored in raw_data so no schema change is required — the
+  // Compliance Gate reads it back at variant-generation time.
+  const rawCategory = String(formData.get("product_category") ?? "general");
+  const validCategories = ["general", "health", "cosmetics", "financial"];
+  const product_category = validCategories.includes(rawCategory) ? rawCategory : "general";
 
   // Deterministic score first, then let AI refine (falls back if no API key).
   const base = computeScore({ price, commission_rate });
@@ -36,7 +58,7 @@ export async function createProduct(formData: FormData) {
     source_platform,
     score: ai.score ?? base.score,
     tier: ai.tier ?? base.tier,
-    raw_data: { rationale: ai.rationale },
+    raw_data: { rationale: ai.rationale, category: product_category },
     created_by: ctx.userId,
   });
 
@@ -87,14 +109,24 @@ export async function generateContentForCampaign(formData: FormData) {
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, goal, target_platforms, products(name)")
+    .select("id, name, goal, target_platforms, products(name, raw_data)")
     .eq("id", campaignId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
   if (!campaign) return;
 
-  const productName =
-    (campaign.products as unknown as { name: string } | null)?.name ?? campaign.name;
+  const product = campaign.products as unknown as {
+    name: string;
+    raw_data?: { category?: string };
+  } | null;
+  const productName = product?.name ?? campaign.name;
+  const validCategories = ["general", "health", "cosmetics", "financial"] as const;
+  const rawCat = product?.raw_data?.category ?? "general";
+  const productCategory: (typeof validCategories)[number] = (
+    validCategories as readonly string[]
+  ).includes(rawCat)
+    ? (rawCat as (typeof validCategories)[number])
+    : "general";
   const platforms = ((campaign.target_platforms as string[]) ?? []).filter((p) =>
     PLATFORM_KEYS.includes(p as PlatformKey)
   ) as PlatformKey[];
@@ -128,6 +160,7 @@ export async function generateContentForCampaign(formData: FormData) {
       caption: variant.caption,
       hashtags: variant.hashtags,
       aiGenerated: true,
+      productCategory,
     });
 
     const { data: cv } = await supabase
@@ -176,21 +209,38 @@ export async function rewriteVariant(formData: FormData) {
   const variantId = String(formData.get("variant_id") ?? "");
   const { data: v } = await supabase
     .from("content_variants")
-    .select("id, platform, variant_body, hashtags")
+    .select(
+      "id, platform, variant_body, hashtags, content_items(campaign_id, campaigns(products(raw_data)))"
+    )
     .eq("id", variantId)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
   if (!v) return;
 
+  // Category flows product → campaign → content_item → variant. Fall back to
+  // 'general' if the join comes back empty (older data, or campaigns without
+  // a product link).
+  const validCategories = ["general", "health", "cosmetics", "financial"] as const;
+  const item = v.content_items as unknown as {
+    campaigns?: { products?: { raw_data?: { category?: string } } | null } | null;
+  } | null;
+  const rawCat = item?.campaigns?.products?.raw_data?.category ?? "general";
+  const productCategory: (typeof validCategories)[number] = (
+    validCategories as readonly string[]
+  ).includes(rawCat)
+    ? (rawCat as (typeof validCategories)[number])
+    : "general";
+
   const platform = v.platform as PlatformKey;
   const before = checkCompliance({
     platform,
-    caption: v.variant_body as string,
+    caption: (v.variant_body as string | null) ?? "",
     hashtags: (v.hashtags as string[]) ?? [],
     aiGenerated: true,
+    productCategory,
   });
   const rewritten = await rewriteForCompliance({
-    caption: v.variant_body as string,
+    caption: (v.variant_body as string | null) ?? "",
     platform,
     issues: before.results.filter((r) => !r.passed).map((r) => r.message),
   });
@@ -199,6 +249,7 @@ export async function rewriteVariant(formData: FormData) {
     caption: rewritten,
     hashtags: (v.hashtags as string[]) ?? [],
     aiGenerated: true,
+    productCategory,
   });
 
   await supabase
@@ -425,4 +476,316 @@ export async function recordMetrics(formData: FormData) {
   });
   revalidatePath("/analytics");
   revalidatePath("/revenue-forecast");
+}
+
+// ===== Track F — Team management =====
+
+// Every team mutation must be initiated by the workspace owner. RLS also
+// blocks non-owner writes; checking here gives a clean error message.
+async function ownerCtx() {
+  const { supabase, ctx } = await ctxAndClient();
+  if (ctx.role !== "owner") throw new Error("เฉพาะ owner เท่านั้นที่จัดการทีมได้");
+  return { supabase, ctx };
+}
+
+export async function inviteMember(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const role = String(formData.get("role") ?? "editor");
+  if (!email || !email.includes("@")) throw new Error("อีเมลไม่ถูกต้อง");
+  if (!isInvitableRole(role)) throw new Error("บทบาทไม่ถูกต้อง");
+
+  const token = generateInviteToken();
+  const { error } = await supabase.from("workspace_invitations").insert({
+    workspace_id: ctx.workspaceId,
+    email,
+    role,
+    token,
+    invited_by: ctx.userId,
+  });
+  if (error) throw new Error(error.message);
+
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  const url = inviteUrl({ origin, token });
+  const sent = await sendInviteEmail({
+    to: email,
+    inviterName: ctx.email,
+    workspaceName: ctx.workspaceName,
+    url,
+  });
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.invite,
+    entityType: "workspace_invitations",
+    metadata: { email, role, delivered: sent.delivered, via: sent.via },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function revokeInvite(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const id = String(formData.get("invite_id") ?? "");
+  if (!id) return;
+  const { error } = await supabase
+    .from("workspace_invitations")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("workspace_id", ctx.workspaceId);
+  if (error) throw new Error(error.message);
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.inviteRevoke,
+    entityType: "workspace_invitations",
+    entityId: id,
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function changeMemberRole(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  const role = String(formData.get("role") ?? "");
+  if (!memberId || !isInvitableRole(role)) throw new Error("ข้อมูลไม่ถูกต้อง");
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id, role")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) throw new Error("ไม่พบสมาชิก");
+  // Enforce the "always at least one owner" invariant. Owner cannot demote
+  // themselves via this action — must use transferOwnership (atomic swap).
+  if (target.user_id === ctx.userId && role !== "owner") {
+    throw new Error("owner ไม่สามารถลดบทบาทตัวเองได้ — ใช้ 'โอนความเป็นเจ้าของ' แทน");
+  }
+  // Refuse to create a second owner via this path: transferOwnership is the
+  // audited swap. Keeps a single accountable party per workspace.
+  if (role === "owner" && target.user_id !== ctx.userId) {
+    throw new Error("ต้องใช้ 'โอนความเป็นเจ้าของ' เพื่อตั้ง owner ใหม่");
+  }
+
+  const { error: updateError } = await supabase
+    .from("workspace_members")
+    .update({ role })
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId);
+  if (updateError) throw new Error(updateError.message);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.roleChange,
+    entityType: "workspace_members",
+    entityId: memberId,
+    metadata: { role, target_user: target.user_id },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function removeMember(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  if (!memberId) return;
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id, role")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) return;
+  if (target.user_id === ctx.userId) throw new Error("owner ลบตัวเองไม่ได้");
+
+  const { error: delError } = await supabase
+    .from("workspace_members")
+    .delete()
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId);
+  if (delError) throw new Error(delError.message);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.memberRemove,
+    entityType: "workspace_members",
+    entityId: memberId,
+    metadata: { target_user: target.user_id, prior_role: target.role },
+  });
+  revalidatePath("/settings/team");
+}
+
+export async function transferOwnership(formData: FormData) {
+  const { supabase, ctx } = await ownerCtx();
+  const memberId = String(formData.get("member_id") ?? "");
+  if (!memberId) return;
+
+  const { data: target } = await supabase
+    .from("workspace_members")
+    .select("user_id")
+    .eq("id", memberId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!target) throw new Error("ไม่พบสมาชิก");
+  if (target.user_id === ctx.userId) throw new Error("คุณคือ owner อยู่แล้ว");
+
+  // Owner swap is 3 writes: demote current owner, promote new owner, flip
+  // workspaces.owner_id. If they ran as separate HTTP calls, a failure
+  // between them would leave the workspace ownerless. Migration 0016
+  // wraps them in a Postgres function so they land as one transaction.
+  const admin = createAdminClient();
+  if (!admin) throw new Error("Supabase admin client ยังไม่ตั้งค่า");
+
+  const { error: rpcError } = await admin.rpc("transfer_workspace_ownership", {
+    p_workspace_id: ctx.workspaceId,
+    p_current_owner_id: ctx.userId,
+    p_new_owner_id: target.user_id,
+  });
+  if (rpcError) throw new Error(rpcError.message);
+
+  await logAudit(admin, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: TEAM_ACTIONS.ownerTransfer,
+    entityType: "workspaces",
+    entityId: ctx.workspaceId,
+    metadata: { new_owner: target.user_id, previous_owner: ctx.userId },
+  });
+  revalidatePath("/settings/team");
+  revalidatePath("/settings");
+}
+
+// Set the active workspace for the caller. Stored in a cookie because Server
+// Components read cookies with no round trip; workspace.ts falls back to the
+// first membership if the cookie is missing or points to a workspace the
+// caller no longer belongs to.
+export async function switchWorkspace(formData: FormData) {
+  const wsId = String(formData.get("workspace_id") ?? "");
+  if (!wsId) return;
+  const { supabase } = await ctxAndClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: member } = await supabase
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .eq("workspace_id", wsId)
+    .maybeSingle();
+  if (!member) throw new Error("คุณไม่ได้เป็นสมาชิกของเวิร์กสเปซนี้");
+
+  const c = await cookies();
+  c.set("active_workspace_id", wsId, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/", "layout");
+}
+
+// Track C — enqueue a media render for a content_variant via the external
+// render worker. Creates a render_jobs row, POSTs to the worker with an HMAC,
+// and lets the worker call back into /api/render/callback when done.
+export async function renderVariantMedia(formData: FormData) {
+  const { supabase, ctx } = await ctxAndClient();
+  const variantId = String(formData.get("variant_id") ?? "");
+  if (!variantId) return;
+  if (!renderConfigured()) {
+    throw new Error("ยังไม่ตั้งค่า RENDER_WORKER_URL/RENDER_WORKER_SECRET");
+  }
+
+  const { data: v } = await supabase
+    .from("content_variants")
+    .select("id, platform, variant_body, hashtags, cta, media_url")
+    .eq("id", variantId)
+    .eq("workspace_id", ctx.workspaceId)
+    .maybeSingle();
+  if (!v) throw new Error("ไม่พบ variant");
+
+  const nonce = generateNonce();
+  const { data: job, error: jobErr } = await supabase
+    .from("render_jobs")
+    .insert({
+      workspace_id: ctx.workspaceId,
+      content_variant_id: variantId,
+      requested_by: ctx.userId,
+      status: "queued",
+      callback_nonce: nonce,
+    })
+    .select("id")
+    .single();
+  if (jobErr || !job) {
+    throw new Error(
+      `สร้าง render_job ไม่สำเร็จ: ${jobErr?.message ?? "unknown error"}`
+    );
+  }
+
+  // Trusted origin comes from APP_URL (set at deploy time), NOT from the
+  // request's Host / X-Forwarded-Proto headers. Otherwise a spoofed Host
+  // could point the worker's callback (which carries jobId + nonce +
+  // signature + mediaUrl) at an attacker-controlled host. Fall back to the
+  // request headers only when APP_URL isn't set (dev / self-hosted).
+  const configuredOrigin = (process.env.APP_URL ?? "").replace(/\/+$/, "");
+  const origin = configuredOrigin
+    ? configuredOrigin
+    : await (async () => {
+        const h = await headers();
+        return `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+      })();
+
+  // Pick a template based on the target platform's aspect ratio bias.
+  // TikTok / Instagram Reels want vertical; Facebook / YouTube tolerate
+  // square (their card view crops it acceptably).
+  const platform = String(v.platform ?? "");
+  const template: RenderJobPayload["template"] =
+    platform === "tiktok" || platform === "shopee_live" || platform === "shopee_video"
+      ? "vertical"
+      : platform === "instagram"
+        ? "story"
+        : "square";
+
+  const payload: RenderJobPayload = {
+    jobId: job.id as string,
+    workspaceId: ctx.workspaceId,
+    contentVariantId: variantId,
+    callbackNonce: nonce,
+    callbackUrl: `${origin}/api/render/callback`,
+    template,
+    caption: (v.variant_body as string) ?? "",
+    hashtags: (v.hashtags as string[]) ?? [],
+    cta: (v.cta as string) ?? null,
+    sourceMediaUrl: (v.media_url as string) ?? null,
+  };
+
+  const result = await enqueueRender(payload);
+  if (!result.ok) {
+    await supabase
+      .from("render_jobs")
+      .update({ status: "failed", error_message: result.error ?? "enqueue failed" })
+      .eq("id", job.id);
+    throw new Error(`worker rejected: ${result.error ?? result.status}`);
+  }
+
+  await supabase
+    .from("render_jobs")
+    .update({ status: "rendering" })
+    .eq("id", job.id);
+
+  await logAudit(supabase, {
+    workspaceId: ctx.workspaceId,
+    userId: ctx.userId,
+    action: "render.enqueue",
+    entityType: "render_jobs",
+    entityId: job.id as string,
+    metadata: { platform, template },
+  });
+
+  revalidatePath("/content-studio");
 }
