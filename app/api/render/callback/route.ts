@@ -10,7 +10,8 @@ import { verifyCallbackAuth } from "@/lib/render";
 //   4) mirrors media_url onto the source content_variant so the publish
 //      flow can pick it up
 //
-// Serverless-safe: no fs / ffmpeg / child_process here — CI enforces that.
+// Serverless-safe: no filesystem or media transcoding in this route — CI's
+// grep guard enforces that; heavy lifting happens in the external worker.
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     jobId?: string;
