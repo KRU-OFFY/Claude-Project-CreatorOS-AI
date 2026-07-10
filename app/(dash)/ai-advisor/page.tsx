@@ -1,7 +1,12 @@
 import { PageHeader, Card, EmptyState } from "@/components/ui";
 import { listAnalytics, listAnalyticsWindow, listProducts } from "@/lib/data";
 import { aggregate } from "@/lib/analytics/normalize";
-import { summarize, linearForecast, dailyTotals } from "@/lib/analytics/trends";
+import {
+  summarize,
+  linearForecast,
+  dailyTotals,
+  todayInBangkok,
+} from "@/lib/analytics/trends";
 import { adviseNextCycle, aiMode } from "@/lib/ai";
 
 const priorityColor: Record<string, string> = {
@@ -43,9 +48,12 @@ export default async function AiAdvisorPage() {
     revenue: Number(r.revenue),
     commission: Number(r.commission),
   }));
-  const trends = summarize(trendRows, TREND_WINDOW);
+  // Anchor summarize + forecast to the same Bangkok "today" so tiles and
+  // the forecast table agree on where the window ends.
+  const todayIso = todayInBangkok();
+  const trends = summarize(trendRows, TREND_WINDOW, todayIso);
   const forecast = linearForecast(
-    dailyTotals(trendRows, TREND_WINDOW),
+    dailyTotals(trendRows, TREND_WINDOW, todayIso),
     FORECAST_HORIZON,
     "revenue"
   );

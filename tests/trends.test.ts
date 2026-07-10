@@ -156,7 +156,7 @@ describe("platformShares", () => {
 describe("summarize", () => {
   it("flags hasSignal false when < 3 non-zero days", () => {
     const rows = [row("2026-07-10", "facebook", 100)];
-    expect(summarize(rows, 7).hasSignal).toBe(false);
+    expect(summarize(rows, 7, today).hasSignal).toBe(false);
   });
 
   it("flags hasSignal true when >= 3 non-zero days", () => {
@@ -165,6 +165,6 @@ describe("summarize", () => {
       row("2026-07-09", "facebook", 50),
       row("2026-07-10", "facebook", 50),
     ];
-    expect(summarize(rows, 7).hasSignal).toBe(true);
+    expect(summarize(rows, 7, today).hasSignal).toBe(true);
   });
 });

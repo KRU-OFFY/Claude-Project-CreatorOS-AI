@@ -32,15 +32,30 @@ export interface ForecastPoint {
   upper: number;
 }
 
+// Return today's date (YYYY-MM-DD) in Asia/Bangkok. The whole product
+// targets Thai creators and analytics_metrics.metric_date is written by
+// the ingest cron off local publish times, so the server's UTC clock
+// would shift the day boundary 7h back and drop the freshest day.
+export function todayInBangkok(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(
+    new Date()
+  );
+}
+
 // Bucket a row set by day, summing across platforms and jobs so each day
 // gets exactly one point. Missing days are filled with zeros so the
-// regression sees a continuous series.
+// regression sees a continuous series. `todayIso` overrides the reference
+// day — pass it in tests for stable output; pass it from the page render
+// so the tiles and forecast share the same window boundary.
 export function dailyTotals(
   rows: AnalyticsRow[],
   days: number,
   todayIso?: string
 ): DailyPoint[] {
-  const today = todayIso ? new Date(todayIso) : new Date();
+  const todayStr = todayIso ?? todayInBangkok();
+  // Anchor at UTC midnight so day arithmetic is exact 24h steps and
+  // DST-safe (Thailand has no DST, but the calc should hold anywhere).
+  const today = new Date(todayStr + "T00:00:00Z");
   const startMs = today.getTime() - (days - 1) * 864e5;
 
   const byDate = new Map<string, DailyPoint>();
@@ -165,8 +180,12 @@ export interface TrendSummary {
   hasSignal: boolean;
 }
 
-export function summarize(rows: AnalyticsRow[], days = 14): TrendSummary {
-  const daily = dailyTotals(rows, days);
+export function summarize(
+  rows: AnalyticsRow[],
+  days = 14,
+  todayIso?: string
+): TrendSummary {
+  const daily = dailyTotals(rows, days, todayIso);
   const revenue14d = sum(daily.map((d) => d.revenue));
   const clicks14d = sum(daily.map((d) => d.clicks));
   const orders14d = sum(daily.map((d) => d.orders));

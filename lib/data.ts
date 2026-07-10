@@ -84,10 +84,20 @@ export async function listAnalytics() {
 
 // Last-N-days window used by the trend helpers (Advisor + Forecast).
 // Server-side date filter keeps the payload small for high-volume workspaces.
+//
+// The window is anchored to today's Bangkok date so the SQL boundary
+// matches the client-side bucket boundary — otherwise a query issued
+// shortly after midnight Thailand time could miss the current day.
 export async function listAnalyticsWindow(days: number) {
   const s = await scoped();
   if (!s) return [];
-  const sinceIso = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+  }).format(new Date());
+  const todayMs = new Date(todayStr + "T00:00:00Z").getTime();
+  const sinceIso = new Date(todayMs - (days - 1) * 864e5)
+    .toISOString()
+    .slice(0, 10);
   const { data } = await s.supabase
     .from("analytics_metrics")
     .select("platform, metric_date, views, reach, engagement, clicks, orders, revenue, commission")

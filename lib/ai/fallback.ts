@@ -85,9 +85,11 @@ export function adviseNextCycle(summary: {
         priority: "high",
       });
     } else if (trends.revenueTrendPct <= -15) {
+      // Math.abs prevents "รายได้ตกลง -20%" (double negative). Thai reads
+      // "รายได้ตกลง 20%" as the natural phrasing.
       recs.push({
         topic: "แจ้งเตือน",
-        recommendation: `รายได้ตกลง ${trends.revenueTrendPct}% ใน ${trends.days} วัน — หา A/B ตัวใหม่ ทบทวนสินค้า/มุมขายก่อนเสียโมเมนตัม`,
+        recommendation: `รายได้ตกลง ${Math.abs(trends.revenueTrendPct)}% ใน ${trends.days} วัน — หา A/B ตัวใหม่ ทบทวนสินค้า/มุมขายก่อนเสียโมเมนตัม`,
         priority: "high",
       });
     } else {
