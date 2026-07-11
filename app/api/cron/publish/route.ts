@@ -84,7 +84,9 @@ async function handle(request: Request) {
     // cannot pair a job with a variant from another workspace.
     const { data: variant } = await admin
       .from("content_variants")
-      .select("variant_body, hashtags, cta, media_url, status")
+      .select(
+        "variant_body, hashtags, cta, media_url, status, content_items(campaigns(products(url)))"
+      )
       .eq("id", job.content_variant_id)
       .eq("workspace_id", job.workspace_id)
       .maybeSingle();
@@ -106,6 +108,13 @@ async function handle(request: Request) {
       continue;
     }
 
+    // Affiliate URL flows product → campaign → content_item → variant; any
+    // missing link along the chain resolves to null (no placement).
+    const vItem = variant.content_items as unknown as {
+      campaigns?: { products?: { url?: string | null } | null } | null;
+    } | null;
+    const affiliateUrl = vItem?.campaigns?.products?.url ?? null;
+
     const outcome = await executePublish(
       { workspace_id: job.workspace_id as string, platform: job.platform as string },
       {
@@ -113,6 +122,7 @@ async function handle(request: Request) {
         hashtags: (variant.hashtags as string[]) ?? null,
         cta: (variant.cta as string) ?? null,
         media_url: (variant.media_url as string) ?? null,
+        affiliate_url: affiliateUrl,
       }
     );
 

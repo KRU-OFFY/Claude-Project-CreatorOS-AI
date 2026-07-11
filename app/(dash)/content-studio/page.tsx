@@ -4,6 +4,35 @@ import { generateContentForCampaign, renderVariantMedia } from "../actions";
 import { platformLabel } from "@/lib/platforms";
 import { aiMode } from "@/lib/ai";
 import { renderConfigured } from "@/lib/render";
+import { placeAffiliateLink } from "@/lib/affiliate";
+
+// Affiliate URL threaded through the content_items → campaigns → products
+// join in listContentVariants; null when any link in the chain is missing.
+function affiliateUrlOf(v: { content_items?: unknown }): string | null {
+  const item = v.content_items as {
+    campaigns?: { products?: { url?: string | null } | null } | null;
+  } | null;
+  return item?.campaigns?.products?.url ?? null;
+}
+
+// Preview where the publish flow will place the affiliate link. Reuses the
+// real placement logic so the note never promises something publish won't do
+// (invalid URL or unsupported platform → no note).
+function affiliateNoteOf(v: { platform: string; content_items?: unknown }): {
+  url: string;
+  note: string;
+} | null {
+  const url = affiliateUrlOf(v);
+  if (!url) return null;
+  const placed = placeAffiliateLink("", url, v.platform);
+  if (placed.firstComment) {
+    return { url, note: "🔗 ลิงก์จะถูกโพสต์เป็นคอมเมนต์แรกอัตโนมัติ" };
+  }
+  if (placed.caption !== "") {
+    return { url, note: "🔗 ลิงก์จะถูกต่อท้ายแคปชั่นอัตโนมัติ" };
+  }
+  return null;
+}
 
 export default async function ContentStudioPage() {
   const [campaigns, variants] = await Promise.all([
@@ -53,7 +82,9 @@ export default async function ContentStudioPage() {
             <EmptyState>ยังไม่มี variant — สร้างจากแคมเปญทางซ้าย</EmptyState>
           ) : (
             <div className="space-y-3">
-              {variants.map((v) => (
+              {variants.map((v) => {
+                const affiliate = affiliateNoteOf(v);
+                return (
                 <div key={v.id} className="rounded-lg border border-black/10 p-3">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-sm font-medium">{platformLabel(v.platform)}</span>
@@ -66,6 +97,12 @@ export default async function ContentStudioPage() {
                     </p>
                   )}
                   {v.cta && <p className="mt-1 text-xs text-black/50">CTA: {v.cta}</p>}
+                  {affiliate && (
+                    <p className="mt-1 text-xs text-black/50">
+                      {affiliate.note}{" "}
+                      <span className="break-all text-brand">{affiliate.url}</span>
+                    </p>
+                  )}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {renderReady ? (
                       <form action={renderVariantMedia}>
@@ -82,7 +119,8 @@ export default async function ContentStudioPage() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
