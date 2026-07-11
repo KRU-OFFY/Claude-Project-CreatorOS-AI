@@ -42,10 +42,16 @@ for (const r of routes) {
 }
 
 // /settings/team is a dash page like the ones above; in demo mode the dash
-// layout redirects to /setup, which Next.js emits as a 307.
+// layout redirects to /setup (307). With Supabase configured it may render at
+// 200 (authenticated) or redirect to /login (307), so accept both statuses.
 {
   const res = await fetch(BASE + "/settings/team", { redirect: "manual" });
-  record("/settings/team (demo redirect)", res.status === 307, `${res.status} (expect 307)`);
+  const allowed = [200, 307];
+  record(
+    "/settings/team (no crash)",
+    allowed.includes(res.status),
+    `${res.status} (expect one of ${allowed.join("/")})`
+  );
 }
 
 // /invite/<token> must never crash. In demo mode createAdminClient() returns
