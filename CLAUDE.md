@@ -14,17 +14,30 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - Data reads go through `lib/data.ts` (workspace-scoped, returns empty in demo mode).
 - Never let missing env crash the app — see `lib/env.ts` (`isSupabaseConfigured`,
   `isAiConfigured`). Unconfigured → `/setup`.
+- Env template is `env.example` at the repo root (committed — the name
+  intentionally doesn't match the `.env*` gitignore pattern). Keep it in sync
+  when adding/removing `process.env.*` reads.
 
 ## Key modules
 - `lib/platforms.ts` — 8-platform registry (single source of truth, from Platform Matrix).
 - `lib/scoring/product-score.ts` — score formula + tier thresholds (hero≥80/growth≥60/test≥40).
 - `lib/compliance/` — data-driven rule engine; per-platform config in `rules/{platform}.ts`,
   shared engine in `index.ts` (disclosure/AI-label/prohibited-claims/caption-length).
+  Thai category packs in `rules/th/{cosmetics,health,financial}.ts`.
 - `lib/ai/` — Anthropic calls (`index.ts`) with rule-based `fallback.ts` for demo mode.
   Default model `claude-sonnet-5` (`AI_MODEL`).
 - `lib/adapters/` — `PlatformAdapter` interface + 8 stub adapters (base factory in `base.ts`).
 - `lib/analytics/normalize.ts` — platform metrics → unified model + `aggregate()`.
+  `lib/analytics/trends.ts` — trend extraction feeding forecast + AI advisor.
 - `lib/tokens.ts` — AES-256-GCM for social tokens (server-only).
+- `lib/meta.ts` / `lib/tiktok.ts` / `lib/youtube.ts` — live connectors (OAuth,
+  publish, insights/refresh); OAuth routes in `app/api/connect/{meta,tiktok,youtube}/`.
+- `lib/team.ts` — invites (token gen, Resend email w/ log fallback), role rules,
+  `TEAM_ACTIONS` audit taxonomy.
+- `lib/render.ts` — external render-worker client (HMAC enqueue + callback
+  verification); contract in `docs/render-worker.md`, skeleton in `workers/render/`.
+- `lib/log.ts` — structured JSON logger (`LOG_LEVEL`) + optional Sentry via
+  `SENTRY_DSN` (`reportError`); cron boundary in `lib/cron.ts::withCronBoundary`.
 - `lib/audit.ts` — `logAudit()` for important writes.
 - `lib/supabase/{client,server,admin,middleware}.ts` — `admin.ts` is service-role, `server-only`.
 
@@ -36,7 +49,8 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - DB trigger blocks compliance-`fail` variants from `publish_queue`.
 
 ## Commands
-- `npm run typecheck` · `npm run build` · `npm run dev`
+- `npm run typecheck` · `npm test` (vitest) · `npm run check:rls` (RLS linter over
+  migrations) · `npm run build` · `npm run dev`
 - Smoke: `npm run start &` then `BASE_URL=http://localhost:3000 node scripts/smoke.mjs`
 
 ## Automation (cron)
@@ -46,6 +60,7 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - TikTok: `hasPublishScope` gates the OAuth callback (user can deny `video.publish`); `publishVideo` requires `privacy_level` (fetched via `creatorInfo.privacyLevelOptions`, defaults to `TIKTOK_DEFAULT_PRIVACY_LEVEL` or `SELF_ONLY`); refresh cron rotates both access + refresh tokens (TikTok returns a new refresh_token on every refresh).
 
 ## Migrations
-`supabase/migrations/0001…0013`. Every business table has `workspace_id` + RLS via
+`supabase/migrations/0001…0017`. Every business table has `workspace_id` + RLS via
 `is_workspace_member()`. Roles: owner/editor/approver/viewer. `0013` is an optional
-pg_cron alternative to Vercel Cron (commented out).
+pg_cron alternative to Vercel Cron (commented out). `0010` is an optional demo seed.
+`0015`/`0016` add team invitations + RPCs; `0017` adds `render_jobs`.

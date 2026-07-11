@@ -10,7 +10,7 @@ AI Operating System สำหรับ Creator และ Affiliate — ค้น
 
 - **Next.js 15** (App Router) · **TypeScript** · **Tailwind CSS**
 - **Supabase** — Auth · PostgreSQL (RLS) · Storage
-- **Anthropic Claude** (`@anthropic-ai/sdk`) — AI Content Studio / scoring / advisor (มี rule-based fallback)
+- **Anthropic Claude** (`@anthropic-ai/sdk`) — AI Content Studio / scoring / advisor / forecast (มี rule-based fallback)
 - **Vercel** สำหรับแอป + **External Render Worker** แยกต่างหากสำหรับ MP4/TTS (ไม่รันบน Vercel serverless)
 
 ## Guided Workflow
@@ -19,46 +19,68 @@ AI Operating System สำหรับ Creator และ Affiliate — ค้น
 Product → Campaign → AI Content → Compliance → Channel Selection → Calendar → Publish → Analytics → Forecast → AI Advisor
 ```
 
-## Pages (12)
+## Features
 
-`/login` `/dashboard` `/products` `/campaigns` `/content-studio` `/compliance`
-`/publish-center` `/calendar` `/analytics` `/revenue-forecast` `/ai-advisor` `/settings`
+- **11 หน้า dashboard:** `/dashboard` `/products` `/campaigns` `/content-studio` `/compliance`
+  `/publish-center` `/calendar` `/analytics` `/revenue-forecast` `/ai-advisor` `/settings`
+  (+ `/login`, `/setup`, `/invite/[token]`)
+- **Team management:** เชิญสมาชิกทางอีเมล/ลิงก์ (`/settings/team`), role owner/editor/approver/viewer,
+  โอน ownership แบบ atomic, audit log ทุก action
+- **Compliance engine + Thai packs:** rule ต่อแพลตฟอร์ม (`lib/compliance/rules/*`) +
+  ชุดกฎไทย `rules/th/` (เครื่องสำอาง / สุขภาพ-อาหารเสริม / การเงิน)
+- **AI Advisor + Revenue Forecast:** วิเคราะห์ trend จาก analytics (`lib/analytics/trends.ts`)
+  และแนะนำรอบถัดไป (Claude หรือ rule-based fallback)
+- **Live connectors 3 แพลตฟอร์ม:** Meta (Facebook Pages + Instagram), TikTok (Content Posting API),
+  YouTube (Data API v3) — OAuth เต็มรูปแบบ, token เข้ารหัส AES-256-GCM, refresh อัตโนมัติ;
+  แพลตฟอร์มที่เหลือเป็น stub โหมด copy-to-post
+- **Automation:** cron 3 ตัว (publish / ingest insights / refresh tokens) + structured logging
+  (`lib/log.ts`) + Sentry (optional)
+- **Render worker interface:** contract สำหรับ render MP4/TTS ภายนอก (HMAC-signed,
+  ดู `docs/render-worker.md`)
 
 ## Getting Started
 
 ```bash
 npm install
-cp .env.local.example .env.local   # แล้วกรอกค่า (ดูด้านล่าง)
-npm run dev
+npm run dev          # รันได้ทันทีแบบ zero-config (demo mode → หน้า /setup)
 ```
 
-หากยังไม่ตั้งค่า Supabase แอปจะยังรันได้และพาไปหน้า `/setup` (ไม่ crash).
+เมื่อพร้อมเชื่อมของจริง copy template แล้วกรอกค่า:
 
-### Environment Variables
+```bash
+cp env.example .env.local
+```
 
-| ตัวแปร | จำเป็น | ใช้ทำอะไร |
+ตัวแปรทั้งหมดมีคำอธิบายใน [`env.example`](./env.example) — สรุปย่อ:
+
+| กลุ่ม | ตัวแปร | จำเป็น |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon key (client) |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | server-only — token ops + system writes (ห้าม import จาก client) |
-| `ANTHROPIC_API_KEY` | ⬜ | เปิดใช้ AI จริง (ไม่ใส่ = โหมด rule-based demo) |
-| `AI_MODEL` | ⬜ | ค่าเริ่มต้น `claude-sonnet-5` |
-| `TOKEN_ENCRYPTION_KEY` | ⬜ | 32-byte hex/base64 เข้ารหัส social token (`openssl rand -hex 32`) |
-| `RENDER_WORKER_URL` / `RENDER_WORKER_SECRET` | ⬜ | External Render Worker |
-| `META_/TIKTOK_/X_/YOUTUBE_/LEMON8_/SHOPEE_ACCESS_TOKEN` | ⬜ | เปิดการโพสต์จริงต่อแพลตฟอร์ม |
+| Supabase | `NEXT_PUBLIC_SUPABASE_URL` `NEXT_PUBLIC_SUPABASE_ANON_KEY` `SUPABASE_SERVICE_ROLE_KEY` | ✅ (ไม่ตั้ง = demo mode) |
+| Security | `TOKEN_ENCRYPTION_KEY` `CRON_SECRET` (สร้างด้วย `openssl rand -hex 32`) | ✅ ใน production |
+| App | `APP_URL` `LOG_LEVEL` | แนะนำ |
+| AI | `ANTHROPIC_API_KEY` `AI_MODEL` (default `claude-sonnet-5`) | ⬜ |
+| Meta | `META_APP_ID` `META_APP_SECRET` | ⬜ |
+| TikTok | `TIKTOK_CLIENT_KEY` `TIKTOK_CLIENT_SECRET` `TIKTOK_DEFAULT_PRIVACY_LEVEL` | ⬜ |
+| YouTube | `GOOGLE_CLIENT_ID` `GOOGLE_CLIENT_SECRET` `YOUTUBE_DEFAULT_PRIVACY` | ⬜ |
+| Render | `RENDER_WORKER_URL` `RENDER_WORKER_SECRET` | ⬜ |
+| Email | `RESEND_API_KEY` `RESEND_FROM_EMAIL` | ⬜ |
+| Observability | `SENTRY_DSN` | ⬜ |
 
 ## Database
 
-Migrations อยู่ที่ `supabase/migrations/` (0001–0010) — apply ด้วย Supabase CLI หรือ MCP:
+Migrations อยู่ที่ `supabase/migrations/` (**0001–0017**) — apply ด้วย Supabase CLI:
 
 ```bash
 supabase link --project-ref <ref>
 supabase db push
 ```
 
+- `0010` เป็น demo seed (ข้ามได้ใน production) · `0013` เป็น pg_cron ทางเลือก (comment ไว้ทั้งไฟล์)
+
 โครงสร้างหลัก: `workspaces`, `workspace_members` (role: owner/editor/approver/viewer),
-`products`, `campaigns`, `content_items`, `content_variants`, `compliance_checks`,
-`channel_connections`, `publish_queue`, `analytics_metrics`, `commissions`, `audit_logs`.
+`workspace_invitations`, `products`, `campaigns`, `content_items`, `content_variants`,
+`compliance_checks`, `channel_connections`, `publish_queue`, `analytics_metrics`,
+`commissions`, `render_jobs`, `audit_logs`.
 
 **Security ที่บังคับใน schema:**
 - ทุกตาราง business มี `workspace_id` + RLS (isolation ตาม membership)
@@ -69,36 +91,49 @@ supabase db push
 ## Testing
 
 ```bash
-npm run typecheck
-npm run build
-npm run start &                       # แล้ว:
+npm run typecheck    # TypeScript
+npm test             # unit tests (vitest) — publish, tokens, compliance, team, ฯลฯ
+npm run check:rls    # linter ตรวจว่าทุกตารางใน migrations มี RLS
+npm run build        # production build
+npm run start &      # แล้ว:
 BASE_URL=http://localhost:3000 node scripts/smoke.mjs
 ```
 
 ## Deployment
 
-1. Deploy แอปบน **Vercel** (ตั้งค่า env ทั้งหมด)
-2. Apply migrations ไป Supabase
-3. (ถ้าต้อง render MP4 จริง) deploy `workers/render-worker/` บน Fly.io/Railway/Cloud Run
-   แล้วชี้ `RENDER_WORKER_URL` มาที่มัน — worker เขียนผลลง Supabase Storage และ callback
-   `/api/render/callback`
+คู่มือฉบับเต็มทีละขั้น (Supabase → Vercel → OAuth apps → smoke test):
+**[`docs/deploy.md`](./docs/deploy.md)**
+
+สรุปย่อ:
+
+1. สร้างโปรเจกต์ Supabase แล้วรัน migrations `0001–0017`
+2. Deploy บน **Vercel** — กรอก env ตาม [`env.example`](./env.example)
+3. สร้าง OAuth apps: Meta developers / TikTok developers / Google Cloud Console
+   (redirect URIs: `<APP_URL>/api/connect/{meta,tiktok,youtube}/callback`)
+4. (optional) Deploy render worker บน Fly.io/Railway/Cloud Run ตาม `docs/render-worker.md`
+5. ตรวจ `/api/health` ว่า flags ครบ
 
 ## Automation (Cron)
 
 Core loop ทำงานเองผ่าน `/api/cron/*` (ป้องกันด้วย `CRON_SECRET` — `Authorization: Bearer`):
 
-| Route | หน้าที่ | ตารางเวลา (แนะนำ) |
+| Route | หน้าที่ | ตารางเวลา (`vercel.json`) |
 |---|---|---|
 | `/api/cron/publish` | ยิงงานใน `publish_queue` ที่ถึงเวลา (`scheduled_at <= now`) ผ่าน connector | ทุก 5 นาที |
 | `/api/cron/ingest` | ดึง insights ของโพสต์ Meta ที่เผยแพร่แล้ว → เขียน `analytics_metrics` | รายชั่วโมง |
-| `/api/cron/refresh-tokens` | ต่ออายุ Meta token ที่ใกล้หมด | รายวัน |
+| `/api/cron/refresh-tokens` | ต่ออายุ token Meta / TikTok / YouTube ที่ใกล้หมด | รายวัน 03:00 UTC |
 
-ตั้งเวลาไว้ใน `vercel.json` (Vercel Cron). **หมายเหตุ:** Vercel Hobby รองรับ cron รายวันเท่านั้น —
-sub-daily (ทุก 5 นาที) ต้องใช้ **Vercel Pro**. ถ้าไม่ใช้ Pro ให้เปิด `supabase/migrations/0013_cron_optional.sql`
+**หมายเหตุ:** Vercel Hobby รองรับ cron รายวันเท่านั้น — sub-daily ต้องใช้ **Vercel Pro**
+ถ้าไม่ใช้ Pro ให้เปิด `supabase/migrations/0013_cron_optional.sql`
 (pg_cron + pg_net เรียก route เดียวกันจากใน Postgres) แทน
 
-## Connector Roadmap
+## Connector Status
 
-รอบนี้ Platform Adapter Layer เป็น interface เดียว + stub (โหมด copy-to-post เมื่อไม่มี credentials).
-ขั้นถัดไป: implement OAuth + publish API จริงต่อ Meta / TikTok / YouTube / X / Shopee แล้วดึง
-analytics จริงเข้ามาแทนการกรอก manual.
+| แพลตฟอร์ม | สถานะ |
+|---|---|
+| Facebook / Instagram (Meta) | ✅ OAuth + publish + insights + token refresh |
+| TikTok | ✅ OAuth + Direct Post (privacy level ตามสถานะ audit ของแอป) + token refresh |
+| YouTube | ✅ OAuth + video upload + token refresh |
+| X / Lemon8 / Shopee Video / Shopee Live | 🔲 stub — โหมด copy-to-post |
+
+ขั้นถัดไป: implement connector ที่เหลือ แล้วดึง analytics จริงเข้ามาแทนการกรอก manual.
