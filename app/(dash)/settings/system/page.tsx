@@ -222,7 +222,12 @@ export default async function SystemSettingsPage() {
 
   // Bootstrap env — configurable only on the hosting side (Vercel), never in-app.
   const bootstrap: { label: string; ok: boolean }[] = [
-    { label: "NEXT_PUBLIC_SUPABASE_URL / ANON_KEY", ok: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) },
+    {
+      label: "NEXT_PUBLIC_SUPABASE_URL / ANON_KEY",
+      ok: Boolean(
+        process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ),
+    },
     { label: "SUPABASE_SERVICE_ROLE_KEY", ok: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY) },
     { label: "TOKEN_ENCRYPTION_KEY", ok: Boolean(process.env.TOKEN_ENCRYPTION_KEY) },
     { label: "CRON_SECRET", ok: Boolean(process.env.CRON_SECRET) },

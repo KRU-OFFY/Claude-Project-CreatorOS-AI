@@ -858,11 +858,17 @@ async function auditSetting(workspaceId: string, action: string, key: string) {
 export async function saveSystemSetting(formData: FormData) {
   const { ctx } = await ownerSystemCtx();
   const key = String(formData.get("key") ?? "");
-  if (!settingDef(key)) throw new Error("ไม่รู้จักการตั้งค่านี้");
+  const def = settingDef(key);
+  if (!def) throw new Error("ไม่รู้จักการตั้งค่านี้");
   const value = String(formData.get("value") ?? "");
   // Empty input means "keep the current value" — secrets render as a mask,
   // so an untouched form must never wipe them. Clearing is its own action.
   if (value.trim() === "") return;
+  // Reject a pasted-back mask — saving it would silently replace the real
+  // secret with the placeholder. Secrets never legitimately contain "•".
+  if ((def.secret && value.includes("•")) || value.includes("••••")) {
+    throw new Error("ค่าที่กรอกเป็นรูปแบบ mask (••••) — กรุณาวางค่า secret จริง");
+  }
   const res = await saveWorkspaceSetting(ctx.workspaceId, key, value, ctx.userId);
   if (!res.ok) throw new Error(res.error ?? "บันทึกไม่สำเร็จ");
   await auditSetting(ctx.workspaceId, "settings.update", key);
