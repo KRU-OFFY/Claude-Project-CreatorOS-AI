@@ -3,6 +3,8 @@ import { listCampaigns, listContentVariants } from "@/lib/data";
 import { generateContentForCampaign, renderVariantMedia } from "../actions";
 import { platformLabel } from "@/lib/platforms";
 import { aiMode } from "@/lib/ai";
+import { getActiveContext } from "@/lib/workspace";
+import { getIntegrationConfig } from "@/lib/settings";
 import { renderConfigured } from "@/lib/render";
 import { placeAffiliateLink } from "@/lib/affiliate";
 
@@ -39,7 +41,9 @@ export default async function ContentStudioPage() {
     listCampaigns(),
     listContentVariants(),
   ]);
-  const renderReady = renderConfigured();
+  const ctx = await getActiveContext();
+  const cfg = ctx?.workspaceId ? await getIntegrationConfig(ctx.workspaceId) : null;
+  const renderReady = renderConfigured(cfg?.render);
 
   return (
     <div>
@@ -70,7 +74,7 @@ export default async function ContentStudioPage() {
                 สร้าง variant ครบทุกแพลตฟอร์มเป้าหมาย
               </button>
               <p className="text-xs text-black/40">
-                โหมด AI: {aiMode() === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
+                โหมด AI: {aiMode(cfg?.ai) === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
               </p>
             </form>
           )}

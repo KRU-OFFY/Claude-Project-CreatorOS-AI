@@ -18,5 +18,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/revenue-forecast", label: "คาดการณ์รายได้", icon: "💰", group: "ผลลัพธ์" },
   { href: "/ai-advisor", label: "AI Advisor", icon: "🤖", group: "ผลลัพธ์" },
   { href: "/settings", label: "ตั้งค่า", icon: "⚙️", group: "ระบบ" },
+  { href: "/settings/system", label: "ตั้งค่าระบบ", icon: "🛠️", group: "ระบบ" },
   { href: "/settings/team", label: "ทีม", icon: "👥", group: "ระบบ" },
 ];

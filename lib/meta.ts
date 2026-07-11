@@ -6,8 +6,24 @@ import "server-only";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
-export function metaConfigured(): boolean {
-  return Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
+// App credentials may come from env or from the in-app settings center
+// (workspace_settings, Track L). Callers that know the workspace pass creds
+// resolved via lib/settings.ts; omitting them falls back to env.
+export interface MetaCreds {
+  appId: string;
+  appSecret: string;
+}
+
+function resolveCreds(creds?: Partial<MetaCreds> | null): MetaCreds {
+  return {
+    appId: creds?.appId || process.env.META_APP_ID || "",
+    appSecret: creds?.appSecret || process.env.META_APP_SECRET || "",
+  };
+}
+
+export function metaConfigured(creds?: Partial<MetaCreds> | null): boolean {
+  const c = resolveCreds(creds);
+  return Boolean(c.appId && c.appSecret);
 }
 
 export function appRedirectUri(origin: string): string {
@@ -25,9 +41,13 @@ const SCOPES = [
   "business_management",
 ].join(",");
 
-export function authDialogUrl(origin: string, state: string): string {
+export function authDialogUrl(
+  origin: string,
+  state: string,
+  creds?: Partial<MetaCreds> | null
+): string {
   const params = new URLSearchParams({
-    client_id: process.env.META_APP_ID ?? "",
+    client_id: resolveCreds(creds).appId,
     redirect_uri: appRedirectUri(origin),
     state,
     scope: SCOPES,
@@ -56,10 +76,15 @@ async function graphPost<T>(path: string, body: Record<string, string>): Promise
 }
 
 // Exchange the OAuth code for a short-lived user token.
-export async function exchangeCode(origin: string, code: string): Promise<string> {
+export async function exchangeCode(
+  origin: string,
+  code: string,
+  creds?: Partial<MetaCreds> | null
+): Promise<string> {
+  const c = resolveCreds(creds);
   const data = await graphGet<{ access_token: string }>("oauth/access_token", {
-    client_id: process.env.META_APP_ID ?? "",
-    client_secret: process.env.META_APP_SECRET ?? "",
+    client_id: c.appId,
+    client_secret: c.appSecret,
     redirect_uri: appRedirectUri(origin),
     code,
   });
@@ -72,13 +97,17 @@ export interface TokenResult {
 }
 
 // Upgrade to (or refresh) a long-lived (~60 day) user token.
-export async function longLivedToken(shortOrLongToken: string): Promise<TokenResult> {
+export async function longLivedToken(
+  shortOrLongToken: string,
+  creds?: Partial<MetaCreds> | null
+): Promise<TokenResult> {
+  const c = resolveCreds(creds);
   const data = await graphGet<{ access_token: string; expires_in?: number }>(
     "oauth/access_token",
     {
       grant_type: "fb_exchange_token",
-      client_id: process.env.META_APP_ID ?? "",
-      client_secret: process.env.META_APP_SECRET ?? "",
+      client_id: c.appId,
+      client_secret: c.appSecret,
       fb_exchange_token: shortOrLongToken,
     }
   );

@@ -25,11 +25,20 @@ vi.mock("@/lib/youtube", () => ({
   publishVideo: vi.fn(),
 }));
 
+// Workspace settings (Track L): the default in these tests is "nothing
+// stored" — workflows enabled, no per-workspace overrides — matching a fresh
+// workspace / demo mode.
+vi.mock("@/lib/settings", () => ({
+  getSetting: vi.fn(),
+  isWorkflowEnabled: vi.fn(),
+}));
+
 import { executePublish } from "@/lib/publish";
 import { getMetaConnection, getConnection } from "@/lib/connections";
 import { publishFacebook, publishInstagram, commentOnPost } from "@/lib/meta";
 import { publishVideo, creatorInfo } from "@/lib/tiktok";
 import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
+import { getSetting, isWorkflowEnabled } from "@/lib/settings";
 
 const conn = (token: string, metadata: Record<string, unknown> = {}) => ({
   accountName: "acct",
@@ -47,6 +56,10 @@ beforeEach(() => {
   vi.mocked(publishVideo).mockReset();
   vi.mocked(creatorInfo).mockReset();
   vi.mocked(publishYouTubeVideo).mockReset();
+  vi.mocked(getSetting).mockReset();
+  vi.mocked(isWorkflowEnabled).mockReset();
+  vi.mocked(getSetting).mockResolvedValue(null);
+  vi.mocked(isWorkflowEnabled).mockResolvedValue(true);
   // TikTok Direct Post requires privacy_level from creator_info; default the
   // mock to SELF_ONLY-capable so the happy path proceeds.
   vi.mocked(creatorInfo).mockResolvedValue({
@@ -112,6 +125,19 @@ describe("executePublish — facebook", () => {
     );
     expect(commentOnPost).toHaveBeenCalled();
     expect(out.error).toBeUndefined();
+    expect(out.publishedUrl).toBe("https://facebook.com/post_42");
+  });
+
+  it("skips the first comment when workflow_affiliate_comment is disabled", async () => {
+    vi.mocked(getMetaConnection).mockResolvedValue(conn("tok", { page_id: "123" }));
+    vi.mocked(publishFacebook).mockResolvedValue("post_42");
+    vi.mocked(isWorkflowEnabled).mockResolvedValue(false);
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "facebook" },
+      { ...variantBase, affiliate_url: "https://s.shopee.co.th/xxx" }
+    );
+    expect(isWorkflowEnabled).toHaveBeenCalledWith("ws", "workflow_affiliate_comment");
+    expect(commentOnPost).not.toHaveBeenCalled();
     expect(out.publishedUrl).toBe("https://facebook.com/post_42");
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyCallbackAuth } from "@/lib/render";
+import { getIntegrationConfig } from "@/lib/settings";
 
 // Callback from the external Render Worker. The worker signs an HMAC over
 // (jobId + nonce + timestamp) using RENDER_WORKER_SECRET. This route:
@@ -30,17 +31,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "malformed" }, { status: 400 });
   }
 
-  const auth = verifyCallbackAuth({
+  const callbackAuth = {
     jobId: body.jobId,
     nonce: body.nonce,
     ts: body.ts as number,
     signature: body.signature,
-  });
+  };
+
+  // First try the env-configured secret (fail-closed: unconfigured → 401
+  // without touching the DB). If that fails, the workspace may have set its
+  // own secret at /settings/system — look up the job's workspace and retry
+  // with that secret. An unknown job returns 401 (not 404) so callers can't
+  // probe job existence without a valid signature.
+  let auth = verifyCallbackAuth(callbackAuth);
+  const admin = createAdminClient();
   if (!auth.ok) {
-    return NextResponse.json({ error: auth.reason }, { status: 401 });
+    if (!admin) return NextResponse.json({ error: auth.reason }, { status: 401 });
+    const { data: probe } = await admin
+      .from("render_jobs")
+      .select("workspace_id")
+      .eq("id", body.jobId)
+      .maybeSingle();
+    if (!probe) return NextResponse.json({ error: auth.reason }, { status: 401 });
+    const { render } = await getIntegrationConfig(probe.workspace_id as string);
+    auth = render.secret
+      ? verifyCallbackAuth(callbackAuth, render)
+      : auth;
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.reason }, { status: 401 });
+    }
   }
 
-  const admin = createAdminClient();
   if (!admin) return NextResponse.json({ error: "not configured" }, { status: 503 });
 
   // Match the nonce stored at enqueue time. Signature alone would be enough

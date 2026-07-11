@@ -13,17 +13,36 @@ const API = "https://open.tiktokapis.com/v2";
 // user.info.basic to read the creator; video.publish/upload to post.
 const SCOPES = ["user.info.basic", "video.publish", "video.upload"].join(",");
 
-export function tiktokConfigured(): boolean {
-  return Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
+// App credentials may come from env or the in-app settings center
+// (workspace_settings, Track L) — callers that know the workspace pass creds.
+export interface TikTokCreds {
+  clientKey: string;
+  clientSecret: string;
+}
+
+function resolveCreds(creds?: Partial<TikTokCreds> | null): TikTokCreds {
+  return {
+    clientKey: creds?.clientKey || process.env.TIKTOK_CLIENT_KEY || "",
+    clientSecret: creds?.clientSecret || process.env.TIKTOK_CLIENT_SECRET || "",
+  };
+}
+
+export function tiktokConfigured(creds?: Partial<TikTokCreds> | null): boolean {
+  const c = resolveCreds(creds);
+  return Boolean(c.clientKey && c.clientSecret);
 }
 
 export function tiktokRedirectUri(origin: string): string {
   return process.env.TIKTOK_REDIRECT_URI || `${origin}/api/connect/tiktok/callback`;
 }
 
-export function authUrl(origin: string, state: string): string {
+export function authUrl(
+  origin: string,
+  state: string,
+  creds?: Partial<TikTokCreds> | null
+): string {
   const params = new URLSearchParams({
-    client_key: process.env.TIKTOK_CLIENT_KEY ?? "",
+    client_key: resolveCreds(creds).clientKey,
     scope: SCOPES,
     response_type: "code",
     redirect_uri: tiktokRedirectUri(origin),
@@ -77,10 +96,15 @@ function toToken(r: TokenResponse): TikTokToken {
   };
 }
 
-export async function exchangeCode(origin: string, code: string): Promise<TikTokToken> {
+export async function exchangeCode(
+  origin: string,
+  code: string,
+  creds?: Partial<TikTokCreds> | null
+): Promise<TikTokToken> {
+  const c = resolveCreds(creds);
   const r = await postForm<TokenResponse>(`${API}/oauth/token/`, {
-    client_key: process.env.TIKTOK_CLIENT_KEY ?? "",
-    client_secret: process.env.TIKTOK_CLIENT_SECRET ?? "",
+    client_key: c.clientKey,
+    client_secret: c.clientSecret,
     code,
     grant_type: "authorization_code",
     redirect_uri: tiktokRedirectUri(origin),
@@ -88,10 +112,14 @@ export async function exchangeCode(origin: string, code: string): Promise<TikTok
   return toToken(r);
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<TikTokToken> {
+export async function refreshAccessToken(
+  refreshToken: string,
+  creds?: Partial<TikTokCreds> | null
+): Promise<TikTokToken> {
+  const c = resolveCreds(creds);
   const r = await postForm<TokenResponse>(`${API}/oauth/token/`, {
-    client_key: process.env.TIKTOK_CLIENT_KEY ?? "",
-    client_secret: process.env.TIKTOK_CLIENT_SECRET ?? "",
+    client_key: c.clientKey,
+    client_secret: c.clientSecret,
     grant_type: "refresh_token",
     refresh_token: refreshToken,
   });

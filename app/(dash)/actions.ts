@@ -5,6 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getActiveContext } from "@/lib/workspace";
 import { logAudit } from "@/lib/audit";
 import { scoreProduct, generateBrief, generateVariant, rewriteForCompliance } from "@/lib/ai";
+import {
+  getIntegrationConfig,
+  isWorkflowEnabled,
+  settingDef,
+  saveWorkspaceSetting,
+  deleteWorkspaceSetting,
+} from "@/lib/settings";
 import { computeScore } from "@/lib/scoring/product-score";
 import { checkCompliance } from "@/lib/compliance";
 import { isValidAffiliateUrl } from "@/lib/affiliate";
@@ -54,7 +61,11 @@ export async function createProduct(formData: FormData) {
 
   // Deterministic score first, then let AI refine (falls back if no API key).
   const base = computeScore({ price, commission_rate });
-  const ai = await scoreProduct({ name, price, commission_rate, source: source_platform });
+  const { ai: aiCfg } = await getIntegrationConfig(ctx.workspaceId);
+  const ai = await scoreProduct(
+    { name, price, commission_rate, source: source_platform },
+    aiCfg
+  );
 
   await supabase.from("products").insert({
     workspace_id: ctx.workspaceId,
@@ -139,11 +150,15 @@ export async function generateContentForCampaign(formData: FormData) {
   ) as PlatformKey[];
   const targets = platforms.length ? platforms : (["facebook", "tiktok"] as PlatformKey[]);
 
-  const brief = await generateBrief({
-    productName,
-    goal: campaign.goal as string,
-    platforms: targets,
-  });
+  const { ai: aiCfg } = await getIntegrationConfig(ctx.workspaceId);
+  const brief = await generateBrief(
+    {
+      productName,
+      goal: campaign.goal as string,
+      platforms: targets,
+    },
+    aiCfg
+  );
 
   const { data: item } = await supabase
     .from("content_items")
@@ -161,7 +176,7 @@ export async function generateContentForCampaign(formData: FormData) {
   if (!item) return;
 
   for (const platform of targets) {
-    const variant = await generateVariant({ productName, brief: brief.body, platform });
+    const variant = await generateVariant({ productName, brief: brief.body, platform }, aiCfg);
     const compliance = checkCompliance({
       platform,
       caption: variant.caption,
@@ -246,11 +261,15 @@ export async function rewriteVariant(formData: FormData) {
     aiGenerated: true,
     productCategory,
   });
-  const rewritten = await rewriteForCompliance({
-    caption: (v.variant_body as string | null) ?? "",
-    platform,
-    issues: before.results.filter((r) => !r.passed).map((r) => r.message),
-  });
+  const { ai: aiCfg } = await getIntegrationConfig(ctx.workspaceId);
+  const rewritten = await rewriteForCompliance(
+    {
+      caption: (v.variant_body as string | null) ?? "",
+      platform,
+      issues: before.results.filter((r) => !r.passed).map((r) => r.message),
+    },
+    aiCfg
+  );
   const after = checkCompliance({
     platform,
     caption: rewritten,
@@ -525,11 +544,13 @@ export async function inviteMember(formData: FormData) {
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
   const url = inviteUrl({ origin, token });
+  const { resend } = await getIntegrationConfig(ctx.workspaceId);
   const sent = await sendInviteEmail({
     to: email,
     inviterName: ctx.email,
     workspaceName: ctx.workspaceName,
     url,
+    resend: { apiKey: resend.apiKey, fromEmail: resend.fromEmail },
   });
 
   await logAudit(supabase, {
@@ -714,8 +735,12 @@ export async function renderVariantMedia(formData: FormData) {
   const { supabase, ctx } = await ctxAndClient();
   const variantId = String(formData.get("variant_id") ?? "");
   if (!variantId) return;
-  if (!renderConfigured()) {
-    throw new Error("ยังไม่ตั้งค่า RENDER_WORKER_URL/RENDER_WORKER_SECRET");
+  if (!(await isWorkflowEnabled(ctx.workspaceId, "workflow_render"))) {
+    throw new Error("Workflow render ถูกปิดอยู่ — เปิดได้ที่ตั้งค่าระบบ (/settings/system)");
+  }
+  const { render: renderCfg } = await getIntegrationConfig(ctx.workspaceId);
+  if (!renderConfigured(renderCfg)) {
+    throw new Error("ยังไม่ตั้งค่า Render Worker (URL/Secret) — ตั้งได้ที่ /settings/system");
   }
 
   const { data: v } = await supabase
@@ -781,7 +806,7 @@ export async function renderVariantMedia(formData: FormData) {
     sourceMediaUrl: (v.media_url as string) ?? null,
   };
 
-  const result = await enqueueRender(payload);
+  const result = await enqueueRender(payload, renderCfg);
   if (!result.ok) {
     await supabase
       .from("render_jobs")
@@ -805,4 +830,68 @@ export async function renderVariantMedia(formData: FormData) {
   });
 
   revalidatePath("/content-studio");
+}
+
+// ===== Track L — system settings center (/settings/system) =====
+
+async function ownerSystemCtx() {
+  const { supabase, ctx } = await ctxAndClient();
+  if (ctx.role !== "owner") {
+    throw new Error("เฉพาะ owner เท่านั้นที่แก้การตั้งค่าระบบได้");
+  }
+  return { supabase, ctx };
+}
+
+async function auditSetting(workspaceId: string, action: string, key: string) {
+  // Never log values here — keys only.
+  const admin = createAdminClient();
+  if (admin) {
+    await logAudit(admin, {
+      workspaceId,
+      action,
+      entityType: "workspace_settings",
+      metadata: { key },
+    });
+  }
+}
+
+export async function saveSystemSetting(formData: FormData) {
+  const { ctx } = await ownerSystemCtx();
+  const key = String(formData.get("key") ?? "");
+  if (!settingDef(key)) throw new Error("ไม่รู้จักการตั้งค่านี้");
+  const value = String(formData.get("value") ?? "");
+  // Empty input means "keep the current value" — secrets render as a mask,
+  // so an untouched form must never wipe them. Clearing is its own action.
+  if (value.trim() === "") return;
+  const res = await saveWorkspaceSetting(ctx.workspaceId, key, value, ctx.userId);
+  if (!res.ok) throw new Error(res.error ?? "บันทึกไม่สำเร็จ");
+  await auditSetting(ctx.workspaceId, "settings.update", key);
+  revalidatePath("/settings/system");
+}
+
+export async function clearSystemSetting(formData: FormData) {
+  const { ctx } = await ownerSystemCtx();
+  const key = String(formData.get("key") ?? "");
+  if (!settingDef(key)) throw new Error("ไม่รู้จักการตั้งค่านี้");
+  const res = await deleteWorkspaceSetting(ctx.workspaceId, key);
+  if (!res.ok) throw new Error(res.error ?? "ล้างค่าไม่สำเร็จ");
+  await auditSetting(ctx.workspaceId, "settings.clear", key);
+  revalidatePath("/settings/system");
+}
+
+export async function toggleWorkflow(formData: FormData) {
+  const { ctx } = await ownerSystemCtx();
+  const key = String(formData.get("key") ?? "");
+  const def = settingDef(key);
+  if (!def || def.group !== "workflows") throw new Error("ไม่รู้จัก workflow นี้");
+  const enabled = String(formData.get("enabled") ?? "true") === "true";
+  const res = await saveWorkspaceSetting(
+    ctx.workspaceId,
+    key,
+    enabled ? "true" : "false",
+    ctx.userId
+  );
+  if (!res.ok) throw new Error(res.error ?? "บันทึกไม่สำเร็จ");
+  await auditSetting(ctx.workspaceId, enabled ? "settings.workflow_on" : "settings.workflow_off", key);
+  revalidatePath("/settings/system");
 }

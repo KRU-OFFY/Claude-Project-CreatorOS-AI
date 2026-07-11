@@ -54,6 +54,17 @@ for (const r of routes) {
   );
 }
 
+// /settings/system (Track L settings center) — same dash-page semantics.
+{
+  const res = await fetch(BASE + "/settings/system", { redirect: "manual" });
+  const allowed = [200, 307];
+  record(
+    "/settings/system (no crash)",
+    allowed.includes(res.status),
+    `${res.status} (expect one of ${allowed.join("/")})`
+  );
+}
+
 // /invite/<token> must never crash. In demo mode createAdminClient() returns
 // null and the page redirect()s to /setup → observed 307. (With Supabase
 // configured, an unknown token renders the "invalid invite" view at 200.)

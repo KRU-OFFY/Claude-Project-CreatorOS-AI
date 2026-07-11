@@ -14,6 +14,13 @@ Meta / TikTok / YouTube, cron อัตโนมัติ, และของเ
 4. ของเสริม: Render worker, Resend, Sentry
 5. Smoke test หลัง deploy
 
+> **ศูนย์ตั้งค่าในแอป (`/settings/system`):** หลังจากตั้งค่า Supabase + secrets หลัก
+> (`TOKEN_ENCRYPTION_KEY`, `CRON_SECRET`, `APP_URL`) บน Vercel แล้ว ค่า integration
+> ที่เหลือทั้งหมด (Anthropic / Meta / TikTok / Google / Resend / Sentry / Render worker
+> รวมถึงเปิด-ปิด workflow รายตัว) ตั้งได้จากหน้า **ตั้งค่าระบบ** ในแอปโดยตรง —
+> ค่า secret ถูกเข้ารหัส AES-256-GCM ก่อนเก็บ และค่าที่ตั้งในแอปชนะค่า env
+> (env ยังใช้เป็น fallback ได้เหมือนเดิม) แก้ได้เฉพาะ owner ของ workspace
+
 ---
 
 ## 1) Supabase

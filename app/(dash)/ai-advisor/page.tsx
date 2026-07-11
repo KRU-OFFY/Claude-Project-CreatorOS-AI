@@ -8,6 +8,8 @@ import {
   todayInBangkok,
 } from "@/lib/analytics/trends";
 import { adviseNextCycle, aiMode } from "@/lib/ai";
+import { getActiveContext } from "@/lib/workspace";
+import { getIntegrationConfig } from "@/lib/settings";
 
 const priorityColor: Record<string, string> = {
   high: "border-l-red-500",
@@ -58,6 +60,8 @@ export default async function AiAdvisorPage() {
     "revenue"
   );
 
+  const ctx = await getActiveContext();
+  const aiCfg = ctx?.workspaceId ? (await getIntegrationConfig(ctx.workspaceId)).ai : null;
   const recommendations = await adviseNextCycle({
     totals: { revenue: totals.revenue, clicks: totals.clicks, orders: totals.orders },
     byPlatform: byPlatform.map((p) => ({
@@ -69,7 +73,7 @@ export default async function AiAdvisorPage() {
     })),
     topProducts: products.slice(0, 5).map((p) => ({ name: p.name, revenue: p.score ?? 0 })),
     trends,
-  });
+  }, aiCfg);
 
   return (
     <div>
@@ -79,7 +83,7 @@ export default async function AiAdvisorPage() {
       />
 
       <p className="mb-3 text-xs text-black/40">
-        โหมด AI: {aiMode() === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
+        โหมด AI: {aiMode(aiCfg) === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
         {" · "}วิเคราะห์จากข้อมูล {TREND_WINDOW} วันล่าสุด
       </p>
 

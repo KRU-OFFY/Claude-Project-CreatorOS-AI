@@ -4,6 +4,7 @@ import { authorizeCron, withCronBoundary } from "@/lib/cron";
 import { executePublish } from "@/lib/publish";
 import { getConnection } from "@/lib/connections";
 import { logAudit } from "@/lib/audit";
+import { isWorkflowEnabled } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +60,25 @@ async function handle(request: Request) {
 
   let published = 0;
   let failed = 0;
+  let skipped = 0;
+
+  // Per-run cache of the per-workspace publish toggle (/settings/system).
+  const wfCache = new Map<string, boolean>();
+  async function publishEnabled(wsId: string): Promise<boolean> {
+    if (!wfCache.has(wsId)) {
+      wfCache.set(wsId, await isWorkflowEnabled(wsId, "workflow_publish"));
+    }
+    return wfCache.get(wsId) ?? true;
+  }
 
   for (const job of jobs ?? []) {
+    // Workspace opted out of scheduled publishing — leave the job queued so
+    // it resumes when the workflow is re-enabled.
+    if (!(await publishEnabled(job.workspace_id as string))) {
+      skipped++;
+      continue;
+    }
+
     // Re-check the connection at claim time (it could have been disconnected
     // between the pre-load and now). Skip is safe because the query already
     // filtered on connected workspaces — this is a race-window belt-and-braces.
@@ -163,6 +181,7 @@ async function handle(request: Request) {
     processed: jobs?.length ?? 0,
     published,
     failed,
+    skipped,
   });
 }
 
