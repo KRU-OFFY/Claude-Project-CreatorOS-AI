@@ -41,7 +41,11 @@ export async function listContentVariants() {
   if (!s) return [];
   const { data } = await s.supabase
     .from("content_variants")
-    .select("id, platform, variant_body, hashtags, cta, status, created_at, content_items(title)")
+    .select(
+      // campaigns→products join exposes the affiliate URL so Content Studio
+      // can preview where the link will be placed at publish time (Track K).
+      "id, platform, variant_body, hashtags, cta, status, created_at, content_items(title, campaigns(products(url)))"
+    )
     .eq("workspace_id", s.ws)
     .order("created_at", { ascending: false });
   return data ?? [];

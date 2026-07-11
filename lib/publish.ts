@@ -1,7 +1,8 @@
 import "server-only";
 
+import { placeAffiliateLink } from "@/lib/affiliate";
 import { getMetaConnection, getConnection } from "@/lib/connections";
-import { publishFacebook, publishInstagram } from "@/lib/meta";
+import { publishFacebook, publishInstagram, commentOnPost } from "@/lib/meta";
 import { publishVideo as publishTikTokVideo, creatorInfo as tiktokCreatorInfo } from "@/lib/tiktok";
 import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
 
@@ -15,6 +16,10 @@ export interface PublishVariant {
   hashtags: string[] | null;
   cta: string | null;
   media_url: string | null;
+  // Product affiliate URL (products.url) threaded in by the callers. Placement
+  // is per-platform: facebook → auto first comment, IG/TikTok/YouTube →
+  // appended to the caption (see lib/affiliate.ts).
+  affiliate_url?: string | null;
 }
 
 export interface PublishOutcome {
@@ -29,7 +34,16 @@ export async function executePublish(
   variant: PublishVariant
 ): Promise<PublishOutcome> {
   const hashtagStr = (variant.hashtags ?? []).map((h) => `#${h}`).join(" ");
-  const caption = hashtagStr ? `${variant.variant_body}\n${hashtagStr}` : variant.variant_body;
+  const builtCaption = hashtagStr
+    ? `${variant.variant_body}\n${hashtagStr}`
+    : variant.variant_body;
+  // Auto affiliate link: facebook keeps the caption clean and gets the link as
+  // a first comment; IG/TikTok/YouTube get it appended to the caption.
+  const { caption, firstComment } = placeAffiliateLink(
+    builtCaption,
+    variant.affiliate_url,
+    job.platform
+  );
 
   try {
     if (job.platform === "facebook") {
@@ -37,6 +51,15 @@ export async function executePublish(
       if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี Facebook" };
       const pageId = String(conn.metadata.page_id ?? "");
       const postId = await publishFacebook(pageId, conn.token, caption, variant.cta);
+      if (firstComment) {
+        // Best-effort: the post already succeeded, so a failed affiliate
+        // comment must not fail the publish (the creator can add it manually).
+        try {
+          await commentOnPost(postId, conn.token, firstComment);
+        } catch {
+          // ignore — comment is an enhancement, not part of the publish contract
+        }
+      }
       return { publishedUrl: `https://facebook.com/${postId}` };
     }
     if (job.platform === "instagram") {

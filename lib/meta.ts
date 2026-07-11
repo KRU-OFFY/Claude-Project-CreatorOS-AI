@@ -118,6 +118,20 @@ export async function publishFacebook(
   return res.id; // {pageId}_{postId}
 }
 
+// Comment on a published Facebook post (used for the auto affiliate-link
+// first comment). Returns the created comment id.
+export async function commentOnPost(
+  postId: string,
+  pageToken: string,
+  message: string
+): Promise<string> {
+  const res = await graphPost<{ id: string }>(`${postId}/comments`, {
+    message,
+    access_token: pageToken,
+  });
+  return res.id;
+}
+
 // Publish an image post to an Instagram business account (2-step: container → publish).
 export async function publishInstagram(
   igUserId: string,

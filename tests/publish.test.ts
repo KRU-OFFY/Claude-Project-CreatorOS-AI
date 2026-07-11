@@ -13,6 +13,7 @@ vi.mock("@/lib/connections", () => ({
 vi.mock("@/lib/meta", () => ({
   publishFacebook: vi.fn(),
   publishInstagram: vi.fn(),
+  commentOnPost: vi.fn(),
 }));
 
 vi.mock("@/lib/tiktok", () => ({
@@ -26,7 +27,7 @@ vi.mock("@/lib/youtube", () => ({
 
 import { executePublish } from "@/lib/publish";
 import { getMetaConnection, getConnection } from "@/lib/connections";
-import { publishFacebook, publishInstagram } from "@/lib/meta";
+import { publishFacebook, publishInstagram, commentOnPost } from "@/lib/meta";
 import { publishVideo, creatorInfo } from "@/lib/tiktok";
 import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
 
@@ -42,6 +43,7 @@ beforeEach(() => {
   vi.mocked(getConnection).mockReset();
   vi.mocked(publishFacebook).mockReset();
   vi.mocked(publishInstagram).mockReset();
+  vi.mocked(commentOnPost).mockReset();
   vi.mocked(publishVideo).mockReset();
   vi.mocked(creatorInfo).mockReset();
   vi.mocked(publishYouTubeVideo).mockReset();
@@ -80,6 +82,37 @@ describe("executePublish — facebook", () => {
     const out = await executePublish({ workspace_id: "ws", platform: "facebook" }, variantBase);
     expect(out.error).toBe("graph 500");
     expect(out.publishedUrl).toBeUndefined();
+  });
+
+  it("posts the affiliate link as an automatic first comment (caption untouched)", async () => {
+    vi.mocked(getMetaConnection).mockResolvedValue(conn("tok", { page_id: "123" }));
+    vi.mocked(publishFacebook).mockResolvedValue("post_42");
+    vi.mocked(commentOnPost).mockResolvedValue("comment_1");
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "facebook" },
+      { ...variantBase, affiliate_url: "https://s.shopee.co.th/xxx" }
+    );
+    // Caption stays clean — the link never enters the FB post body.
+    expect(publishFacebook).toHaveBeenCalledWith("123", "tok", "hello", null);
+    expect(commentOnPost).toHaveBeenCalledWith(
+      "post_42",
+      "tok",
+      "🔥 สนใจสั่งซื้อ คลิกเลย! https://s.shopee.co.th/xxx"
+    );
+    expect(out.publishedUrl).toBe("https://facebook.com/post_42");
+  });
+
+  it("still succeeds when the affiliate first comment fails", async () => {
+    vi.mocked(getMetaConnection).mockResolvedValue(conn("tok", { page_id: "123" }));
+    vi.mocked(publishFacebook).mockResolvedValue("post_42");
+    vi.mocked(commentOnPost).mockRejectedValue(new Error("comment blocked"));
+    const out = await executePublish(
+      { workspace_id: "ws", platform: "facebook" },
+      { ...variantBase, affiliate_url: "https://s.shopee.co.th/xxx" }
+    );
+    expect(commentOnPost).toHaveBeenCalled();
+    expect(out.error).toBeUndefined();
+    expect(out.publishedUrl).toBe("https://facebook.com/post_42");
   });
 });
 

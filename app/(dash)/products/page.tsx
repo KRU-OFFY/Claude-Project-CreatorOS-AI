@@ -18,6 +18,21 @@ export default async function ProductsPage() {
           <h2 className="mb-3 font-semibold">เพิ่มสินค้า</h2>
           <form action={createProduct} className="space-y-3">
             <Field name="name" label="ชื่อสินค้า" required />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-black/60">
+                ลิงก์ Affiliate (เช่น https://s.shopee.co.th/xxx)
+              </label>
+              <input
+                name="url"
+                type="url"
+                placeholder="https://s.shopee.co.th/xxx"
+                className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-brand"
+              />
+              <p className="mt-1 text-[11px] text-black/40">
+                ระบบจะวางลิงก์ให้อัตโนมัติตอนโพสต์ — Facebook เป็นคอมเมนต์แรก
+                แพลตฟอร์มอื่นต่อท้ายแคปชั่น
+              </p>
+            </div>
             <Field name="price" label="ราคา (บาท)" type="number" />
             <Field name="commission_rate" label="ค่าคอมมิชชั่น (%)" type="number" />
             <div>

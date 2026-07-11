@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/audit";
 import { scoreProduct, generateBrief, generateVariant, rewriteForCompliance } from "@/lib/ai";
 import { computeScore } from "@/lib/scoring/product-score";
 import { checkCompliance } from "@/lib/compliance";
+import { isValidAffiliateUrl } from "@/lib/affiliate";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/platforms";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -39,6 +40,11 @@ export async function createProduct(formData: FormData) {
   const price = Number(formData.get("price")) || null;
   const commission_rate = Number(formData.get("commission_rate")) || null;
   const source_platform = String(formData.get("source_platform") ?? "manual");
+  // Affiliate URL (Track K) — stored in the existing products.url column and
+  // auto-placed at publish time (FB first comment / caption append elsewhere).
+  // Only http(s) URLs are kept; anything else is dropped silently.
+  const rawUrl = String(formData.get("url") ?? "").trim();
+  const url = rawUrl && isValidAffiliateUrl(rawUrl) ? rawUrl : null;
   // Category drives Thai regulatory rule packs (health / cosmetics /
   // financial). Stored in raw_data so no schema change is required — the
   // Compliance Gate reads it back at variant-generation time.
@@ -53,6 +59,7 @@ export async function createProduct(formData: FormData) {
   await supabase.from("products").insert({
     workspace_id: ctx.workspaceId,
     name,
+    url,
     price,
     commission_rate,
     source_platform,
@@ -397,11 +404,20 @@ export async function publishNow(formData: FormData) {
 
   const { data: variant } = await supabase
     .from("content_variants")
-    .select("variant_body, hashtags, cta, media_url, status")
+    .select(
+      "variant_body, hashtags, cta, media_url, status, content_items(campaigns(products(url)))"
+    )
     .eq("id", job.content_variant_id)
     .eq("workspace_id", ctx.workspaceId)
     .maybeSingle();
   if (!variant || variant.status === "fail") return;
+
+  // Affiliate URL flows product → campaign → content_item → variant (same
+  // join shape as rewriteVariant). Missing links along the chain → null.
+  const vItem = variant.content_items as unknown as {
+    campaigns?: { products?: { url?: string | null } | null } | null;
+  } | null;
+  const affiliateUrl = vItem?.campaigns?.products?.url ?? null;
 
   // Atomically claim the job (only if still queued) so a double-click or a
   // concurrent cron run cannot publish the same job twice.
@@ -421,6 +437,7 @@ export async function publishNow(formData: FormData) {
       hashtags: (variant.hashtags as string[]) ?? null,
       cta: (variant.cta as string) ?? null,
       media_url: (variant.media_url as string) ?? null,
+      affiliate_url: affiliateUrl,
     }
   );
   const publishedUrl = outcome.publishedUrl ?? null;
