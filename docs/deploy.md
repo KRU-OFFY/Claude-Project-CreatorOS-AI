@@ -167,6 +167,10 @@ Redirect URI ด้านล่างคือ path จริงในโค้�
 - สร้างโปรเจกต์ Sentry แล้วตั้ง `SENTRY_DSN`
 - ต้อง `npm install @sentry/node` เพิ่มเอง (เป็น optional dependency — `lib/log.ts`
   โหลดแบบ dynamic เฉพาะเมื่อ DSN ถูกตั้ง; ไม่ติดตั้งก็แค่ degrade เป็น log ปกติ)
+- หมายเหตุ: โปรเจกต์นี้ตั้งใจใช้ `@sentry/node` แบบ dynamic import ฝั่ง server
+  เท่านั้น (best-effort ใน cron/error boundary) — ไม่ใช้ `@sentry/nextjs`
+  เพราะตัวนั้นต้องผูกกับ build/webpack config และจะกลายเป็น dependency บังคับ
+  ซึ่งขัดกับดีไซน์ optional ของ `lib/log.ts`
 
 ---
 
@@ -190,8 +194,8 @@ Redirect URI ด้านล่างคือ path จริงในโค้�
    ```bash
    curl -s -o /dev/null -w "%{http_code}\n" https://your-app.vercel.app/api/cron/publish
    # ต้องได้ 401
-   curl -s -H "Authorization: Bearer $CRON_SECRET" https://your-app.vercel.app/api/cron/publish
-   # ต้องได้ JSON ปกติ (ไม่ใช่ 401)
+   curl -s -H "Authorization: Bearer <YOUR_CRON_SECRET>" https://your-app.vercel.app/api/cron/publish
+   # แทน <YOUR_CRON_SECRET> ด้วยค่าจริง — ต้องได้ JSON ปกติ (ไม่ใช่ 401)
    ```
 6. **Local (ก่อน push):**
    ```bash
