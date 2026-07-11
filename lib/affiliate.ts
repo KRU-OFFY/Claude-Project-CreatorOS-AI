@@ -23,19 +23,21 @@ export function isValidAffiliateUrl(url: string): boolean {
 }
 
 export function placeAffiliateLink(
-  caption: string,
+  caption: string | null | undefined,
   url: string | null | undefined,
   platform: string
 ): AffiliatePlacement {
+  // Guard against nullable DB values — never coerce null into "null" text.
+  const safeCaption = caption ?? "";
   if (!url || !isValidAffiliateUrl(url)) {
-    return { caption, firstComment: null };
+    return { caption: safeCaption, firstComment: null };
   }
   if (platform === "facebook") {
     // Link goes into the first comment, not the caption (preserves reach).
-    return { caption, firstComment: `🔥 สนใจสั่งซื้อ คลิกเลย! ${url}` };
+    return { caption: safeCaption, firstComment: `🔥 สนใจสั่งซื้อ คลิกเลย! ${url}` };
   }
   if (platform === "instagram" || platform === "tiktok" || platform === "youtube") {
-    return { caption: `${caption}\n\n🛒 ${url}`, firstComment: null };
+    return { caption: `${safeCaption}\n\n🛒 ${url}`, firstComment: null };
   }
-  return { caption, firstComment: null };
+  return { caption: safeCaption, firstComment: null };
 }
