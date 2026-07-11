@@ -3,6 +3,7 @@ import "server-only";
 import { placeAffiliateLink } from "@/lib/affiliate";
 import { getMetaConnection, getConnection } from "@/lib/connections";
 import { logger, serializeError } from "@/lib/log";
+import { getSetting, isWorkflowEnabled } from "@/lib/settings";
 import { publishFacebook, publishInstagram, commentOnPost } from "@/lib/meta";
 import { publishVideo as publishTikTokVideo, creatorInfo as tiktokCreatorInfo } from "@/lib/tiktok";
 import { publishVideo as publishYouTubeVideo } from "@/lib/youtube";
@@ -55,7 +56,12 @@ export async function executePublish(
       if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี Facebook" };
       const pageId = String(conn.metadata.page_id ?? "");
       const postId = await publishFacebook(pageId, conn.token, caption, variant.cta);
-      if (firstComment) {
+      // The auto first comment can be turned off per workspace at
+      // /settings/system (workflow_affiliate_comment).
+      const commentEnabled =
+        firstComment != null &&
+        (await isWorkflowEnabled(job.workspace_id, "workflow_affiliate_comment"));
+      if (firstComment && commentEnabled) {
         // Best-effort: the post already succeeded, so a failed affiliate
         // comment must not fail the publish (the creator can add it manually).
         try {
@@ -86,7 +92,9 @@ export async function executePublish(
       // otherwise fall back to the first allowed value — never guess.
       const info = await tiktokCreatorInfo(conn.token);
       const allowed = info?.privacyLevelOptions ?? [];
-      const preferred = process.env.TIKTOK_DEFAULT_PRIVACY_LEVEL || "SELF_ONLY";
+      const preferred =
+        (await getSetting(job.workspace_id, "tiktok_default_privacy_level")) ||
+        "SELF_ONLY";
       const privacyLevel = allowed.includes(preferred) ? preferred : allowed[0];
       if (!privacyLevel) {
         return { error: "TikTok ไม่คืน privacy_level ที่ใช้ได้ — ตรวจ scope/สถานะแอป" };
@@ -104,10 +112,10 @@ export async function executePublish(
       if (!conn) return { error: "ยังไม่ได้เชื่อมบัญชี YouTube" };
       if (!variant.media_url) return { error: "YouTube ต้องมีวิดีโอ (media_url)" };
       // Default privacy is "private" (safest — surfaces on the creator's
-      // studio but not to viewers). Ops can override via env when they've
-      // verified the app + channel.
-      const privacy =
-        (process.env.YOUTUBE_DEFAULT_PRIVACY as "private" | "unlisted" | "public") || "private";
+      // studio but not to viewers). Overridable per workspace at
+      // /settings/system or via env.
+      const privacy = ((await getSetting(job.workspace_id, "youtube_default_privacy")) ||
+        "private") as "private" | "unlisted" | "public";
       const videoId = await publishYouTubeVideo(conn.token, caption, variant.media_url, privacy);
       return { publishedUrl: `https://youtube.com/watch?v=${videoId}` };
     }

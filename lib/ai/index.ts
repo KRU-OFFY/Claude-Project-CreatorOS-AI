@@ -3,16 +3,35 @@
 // system remains usable in demo mode.
 
 import Anthropic from "@anthropic-ai/sdk";
-import { env, isAiConfigured } from "@/lib/env";
+import { env } from "@/lib/env";
 import { PLATFORMS, type PlatformKey } from "@/lib/platforms";
 import * as fallback from "@/lib/ai/fallback";
 
-async function generateJSON<T>(system: string, user: string): Promise<T | null> {
-  if (!isAiConfigured()) return null;
+// API key + model may come from env or the in-app settings center
+// (workspace_settings, Track L) — callers that know the workspace pass cfg.
+export interface AiConfig {
+  apiKey?: string | null;
+  model?: string | null;
+}
+
+function resolveAi(cfg?: AiConfig | null): { apiKey: string; model: string } {
+  return {
+    apiKey: cfg?.apiKey || env.anthropicApiKey,
+    model: cfg?.model || env.aiModel,
+  };
+}
+
+async function generateJSON<T>(
+  system: string,
+  user: string,
+  cfg?: AiConfig | null
+): Promise<T | null> {
+  const { apiKey, model } = resolveAi(cfg);
+  if (!apiKey) return null;
   try {
-    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
-      model: env.aiModel,
+      model,
       max_tokens: 4096,
       system: system + "\nตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอก JSON",
       messages: [{ role: "user", content: user }],
@@ -42,10 +61,11 @@ export async function scoreProduct(product: {
   commission_rate?: number | null;
   source?: string | null;
   notes?: string | null;
-}): Promise<ProductScore> {
+}, cfg?: AiConfig | null): Promise<ProductScore> {
   const ai = await generateJSON<ProductScore>(
     "คุณคือผู้เชี่ยวชาญวิเคราะห์สินค้า affiliate ให้คะแนนโอกาสทำเงิน 0-100 และจัดกลุ่ม tier: hero (>=80), growth (60-79), test (40-59), watchlist (<40)",
-    `วิเคราะห์สินค้า: ${JSON.stringify(product)} — ตอบ {"score": number, "tier": string, "rationale": string(ภาษาไทย สั้น)}`
+    `วิเคราะห์สินค้า: ${JSON.stringify(product)} — ตอบ {"score": number, "tier": string, "rationale": string(ภาษาไทย สั้น)}`,
+    cfg
   );
   return ai ?? fallback.scoreProduct(product);
 }
@@ -59,10 +79,11 @@ export async function generateBrief(input: {
   productName: string;
   goal: string;
   platforms: string[];
-}): Promise<Brief> {
+}, cfg?: AiConfig | null): Promise<Brief> {
   const ai = await generateJSON<Brief>(
     "คุณคือ creative strategist สร้างบรีฟคอนเทนต์สำหรับ creator/affiliate ภาษาไทย",
-    `สร้างบรีฟสำหรับสินค้า "${input.productName}" เป้าหมายแคมเปญ: ${input.goal} แพลตฟอร์ม: ${input.platforms.join(", ")} — ตอบ {"title": string, "body": string(บรีฟละเอียด: มุมขาย, กลุ่มเป้าหมาย, key message, โครงคอนเทนต์)}`
+    `สร้างบรีฟสำหรับสินค้า "${input.productName}" เป้าหมายแคมเปญ: ${input.goal} แพลตฟอร์ม: ${input.platforms.join(", ")} — ตอบ {"title": string, "body": string(บรีฟละเอียด: มุมขาย, กลุ่มเป้าหมาย, key message, โครงคอนเทนต์)}`,
+    cfg
   );
   return ai ?? fallback.generateBrief(input);
 }
@@ -77,11 +98,12 @@ export async function generateVariant(input: {
   productName: string;
   brief: string;
   platform: PlatformKey;
-}): Promise<Variant> {
+}, cfg?: AiConfig | null): Promise<Variant> {
   const p = PLATFORMS[input.platform];
   const ai = await generateJSON<Variant>(
     `คุณคือ copywriter สร้างแคปชั่นภาษาไทยสำหรับ ${p.label} สไตล์: ${p.style} CTA แนว: ${p.cta} ต้องใส่ affiliate disclosure (#โฆษณา) และ #AIgenerated เสมอ ห้าม claim เกินจริง`,
-    `สินค้า: "${input.productName}" บรีฟ: ${input.brief.slice(0, 1500)} — ตอบ {"caption": string, "hashtags": string[](ไม่ต้องมี #), "cta": string}`
+    `สินค้า: "${input.productName}" บรีฟ: ${input.brief.slice(0, 1500)} — ตอบ {"caption": string, "hashtags": string[](ไม่ต้องมี #), "cta": string}`,
+    cfg
   );
   return ai ?? fallback.generateVariant(input);
 }
@@ -90,10 +112,11 @@ export async function rewriteForCompliance(input: {
   caption: string;
   platform: PlatformKey;
   issues: string[];
-}): Promise<string> {
+}, cfg?: AiConfig | null): Promise<string> {
   const ai = await generateJSON<{ caption: string }>(
     "คุณคือผู้เชี่ยวชาญ compliance แก้แคปชั่นให้ผ่านกฎโดยคงพลังการขายไว้",
-    `แก้แคปชั่นนี้ให้ผ่าน compliance ของ ${PLATFORMS[input.platform].label}: "${input.caption}" ปัญหาที่พบ: ${input.issues.join("; ")} — ตอบ {"caption": string}`
+    `แก้แคปชั่นนี้ให้ผ่าน compliance ของ ${PLATFORMS[input.platform].label}: "${input.caption}" ปัญหาที่พบ: ${input.issues.join("; ")} — ตอบ {"caption": string}`,
+    cfg
   );
   return ai?.caption ?? fallback.rewriteForCompliance(input);
 }
@@ -112,14 +135,15 @@ export async function adviseNextCycle(summary: {
   byPlatform: { platform: string; views: number; clicks: number; revenue: number; commission: number }[];
   topProducts: { name: string; revenue: number }[];
   trends?: import("@/lib/analytics/trends").TrendSummary;
-}): Promise<AdvisorRecommendation[]> {
+}, cfg?: AiConfig | null): Promise<AdvisorRecommendation[]> {
   const ai = await generateJSON<AdvisorRecommendation[]>(
     "คุณคือ growth advisor สำหรับ creator/affiliate ในตลาดไทย วิเคราะห์ผลงานจริงและแนะนำรอบถัดไป อ้างอิงตัวเลขในบรีฟเสมอ ห้ามแต่งตัวเลข ห้ามพูดกว้างๆ ตอบภาษาไทย",
-    `ข้อมูลผลงาน: ${JSON.stringify(summary)} — ตอบ JSON array ของ {"topic": string, "recommendation": string(อ้างตัวเลขจริง เช่น "+22% รายได้ใน 14 วัน"), "priority": "high"|"medium"|"low"} 3-5 ข้อ ครอบคลุมด้าน: สินค้า, เวลาโพสต์, รูปแบบคอนเทนต์, แพลตฟอร์ม, และคำเตือนถ้าเห็น trend ตกลง`
+    `ข้อมูลผลงาน: ${JSON.stringify(summary)} — ตอบ JSON array ของ {"topic": string, "recommendation": string(อ้างตัวเลขจริง เช่น "+22% รายได้ใน 14 วัน"), "priority": "high"|"medium"|"low"} 3-5 ข้อ ครอบคลุมด้าน: สินค้า, เวลาโพสต์, รูปแบบคอนเทนต์, แพลตฟอร์ม, และคำเตือนถ้าเห็น trend ตกลง`,
+    cfg
   );
   return ai ?? fallback.adviseNextCycle(summary);
 }
 
-export function aiMode(): "anthropic" | "rule_based" {
-  return isAiConfigured() ? "anthropic" : "rule_based";
+export function aiMode(cfg?: AiConfig | null): "anthropic" | "rule_based" {
+  return resolveAi(cfg).apiKey ? "anthropic" : "rule_based";
 }

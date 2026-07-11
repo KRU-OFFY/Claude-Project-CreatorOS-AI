@@ -5,6 +5,7 @@ import { getMetaConnection } from "@/lib/connections";
 import { facebookPostInsights, instagramMediaInsights, type MetaInsight } from "@/lib/meta";
 import { normalize } from "@/lib/analytics/normalize";
 import type { PlatformKey } from "@/lib/platforms";
+import { isWorkflowEnabled } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,14 @@ async function handle(request: Request) {
   // connection" — still cached so we short-circuit further lookups.
   type Conn = Awaited<ReturnType<typeof getMetaConnection>>;
   const connCache = new Map<string, Conn>();
+  // Per-run cache of the per-workspace ingest toggle (/settings/system).
+  const wfCache = new Map<string, boolean>();
+  async function ingestEnabled(wsId: string): Promise<boolean> {
+    if (!wfCache.has(wsId)) {
+      wfCache.set(wsId, await isWorkflowEnabled(wsId, "workflow_ingest"));
+    }
+    return wfCache.get(wsId) ?? true;
+  }
   async function conn(ws: string, platform: "facebook" | "instagram"): Promise<Conn> {
     const key = `${ws}:${platform}`;
     if (connCache.has(key)) return connCache.get(key) ?? null;
@@ -79,6 +88,7 @@ async function handle(request: Request) {
     const rows: Array<Record<string, unknown>> = [];
 
     for (const job of jobs) {
+      if (!(await ingestEnabled(job.workspace_id as string))) continue;
       const platform = job.platform as "facebook" | "instagram";
       const nativeId = extractId(platform, job.published_url as string);
       if (!nativeId) continue;

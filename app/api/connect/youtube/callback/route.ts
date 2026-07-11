@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exchangeCode, myChannel, hasUploadScope } from "@/lib/youtube";
 import { verifyState, saveConnection } from "@/lib/connections";
+import { getIntegrationConfig } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 
@@ -25,7 +26,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const tok = await exchangeCode(url.origin, code);
+    const { google } = await getIntegrationConfig(verified.workspaceId);
+    const tok = await exchangeCode(url.origin, code, google);
 
     // Google's consent screen lets users deny individual scopes. Without
     // youtube.upload the connection is unusable for publishing — refuse

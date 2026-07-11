@@ -19,17 +19,36 @@ const API = "https://www.googleapis.com/youtube/v3";
 // derive an account name for the settings card).
 const SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"].join(" ");
 
-export function youtubeConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+// App credentials may come from env or the in-app settings center
+// (workspace_settings, Track L) — callers that know the workspace pass creds.
+export interface GoogleCreds {
+  clientId: string;
+  clientSecret: string;
+}
+
+function resolveCreds(creds?: Partial<GoogleCreds> | null): GoogleCreds {
+  return {
+    clientId: creds?.clientId || process.env.GOOGLE_CLIENT_ID || "",
+    clientSecret: creds?.clientSecret || process.env.GOOGLE_CLIENT_SECRET || "",
+  };
+}
+
+export function youtubeConfigured(creds?: Partial<GoogleCreds> | null): boolean {
+  const c = resolveCreds(creds);
+  return Boolean(c.clientId && c.clientSecret);
 }
 
 export function youtubeRedirectUri(origin: string): string {
   return process.env.GOOGLE_REDIRECT_URI || `${origin}/api/connect/youtube/callback`;
 }
 
-export function authUrl(origin: string, state: string): string {
+export function authUrl(
+  origin: string,
+  state: string,
+  creds?: Partial<GoogleCreds> | null
+): string {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+    client_id: resolveCreds(creds).clientId,
     scope: SCOPES,
     response_type: "code",
     redirect_uri: youtubeRedirectUri(origin),
@@ -89,21 +108,30 @@ async function postForm<T>(url: string, body: Record<string, string>): Promise<T
   return json as unknown as T;
 }
 
-export async function exchangeCode(origin: string, code: string): Promise<YouTubeToken> {
+export async function exchangeCode(
+  origin: string,
+  code: string,
+  creds?: Partial<GoogleCreds> | null
+): Promise<YouTubeToken> {
+  const c = resolveCreds(creds);
   const r = await postForm<TokenResponse>(TOKEN, {
     code,
-    client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    client_id: c.clientId,
+    client_secret: c.clientSecret,
     redirect_uri: youtubeRedirectUri(origin),
     grant_type: "authorization_code",
   });
   return toToken(r);
 }
 
-export async function refreshAccessToken(refreshToken: string): Promise<YouTubeToken> {
+export async function refreshAccessToken(
+  refreshToken: string,
+  creds?: Partial<GoogleCreds> | null
+): Promise<YouTubeToken> {
+  const c = resolveCreds(creds);
   const r = await postForm<TokenResponse>(TOKEN, {
-    client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-    client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    client_id: c.clientId,
+    client_secret: c.clientSecret,
     grant_type: "refresh_token",
     refresh_token: refreshToken,
   });

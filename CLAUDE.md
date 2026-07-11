@@ -30,6 +30,10 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - `lib/analytics/normalize.ts` — platform metrics → unified model + `aggregate()`.
   `lib/analytics/trends.ts` — trend extraction feeding forecast + AI advisor.
 - `lib/tokens.ts` — AES-256-GCM for social tokens (server-only).
+- `lib/settings.ts` — workspace settings registry + resolution (DB → env →
+  default); secrets encrypted in `workspace_settings.value_encrypted`
+  (owner-write, not client-selectable); workflow toggles via
+  `isWorkflowEnabled()`; UI at `/settings/system`.
 - `lib/meta.ts` / `lib/tiktok.ts` / `lib/youtube.ts` — live connectors (OAuth,
   publish, insights/refresh); OAuth routes in `app/api/connect/{meta,tiktok,youtube}/`.
 - `lib/team.ts` — invites (token gen, Resend email w/ log fallback), role rules,
@@ -60,7 +64,8 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
 - TikTok: `hasPublishScope` gates the OAuth callback (user can deny `video.publish`); `publishVideo` requires `privacy_level` (fetched via `creatorInfo.privacyLevelOptions`, defaults to `TIKTOK_DEFAULT_PRIVACY_LEVEL` or `SELF_ONLY`); refresh cron rotates both access + refresh tokens (TikTok returns a new refresh_token on every refresh).
 
 ## Migrations
-`supabase/migrations/0001…0017`. Every business table has `workspace_id` + RLS via
+`supabase/migrations/0001…0018`. Every business table has `workspace_id` + RLS via
 `is_workspace_member()`. Roles: owner/editor/approver/viewer. `0013` is an optional
 pg_cron alternative to Vercel Cron (commented out). `0010` is an optional demo seed.
-`0015`/`0016` add team invitations + RPCs; `0017` adds `render_jobs`.
+`0015`/`0016` add team invitations + RPCs; `0017` adds `render_jobs`;
+`0018` adds `workspace_settings` (Track L settings center).

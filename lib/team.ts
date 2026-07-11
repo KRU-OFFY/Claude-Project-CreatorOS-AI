@@ -57,9 +57,13 @@ export async function sendInviteEmail(params: {
   inviterName: string;
   workspaceName: string;
   url: string;
+  // Optional override from the in-app settings center (Track L);
+  // falls back to env when omitted.
+  resend?: { apiKey?: string; fromEmail?: string } | null;
 }): Promise<{ delivered: boolean; via: "resend" | "log" }> {
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL || "invites@creatoros.local";
+  const key = params.resend?.apiKey || process.env.RESEND_API_KEY;
+  const from =
+    params.resend?.fromEmail || process.env.RESEND_FROM_EMAIL || "invites@creatoros.local";
   if (!key) {
     // No provider configured — the caller surfaces the URL in the UI.
     console.info(`[invite] ${params.to} → ${params.url}`);

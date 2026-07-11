@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exchangeCode, creatorInfo, hasPublishScope } from "@/lib/tiktok";
 import { verifyState, saveConnection } from "@/lib/connections";
+import { getIntegrationConfig } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const tok = await exchangeCode(url.origin, code);
+    const { tiktok } = await getIntegrationConfig(verified.workspaceId);
+    const tok = await exchangeCode(url.origin, code, tiktok);
 
     // TikTok's consent screen lets users deny individual scopes. Without
     // `video.publish` the connection is unusable for posting — refuse to save

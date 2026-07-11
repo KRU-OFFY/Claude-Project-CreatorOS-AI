@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { exchangeCode, longLivedToken, listPages } from "@/lib/meta";
 import { verifyState, saveMetaConnection } from "@/lib/connections";
+import { getIntegrationConfig } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 
@@ -24,8 +25,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const shortToken = await exchangeCode(url.origin, code);
-    const ll = await longLivedToken(shortToken).catch(() => ({ token: shortToken, expiresAt: null }));
+    const { meta } = await getIntegrationConfig(verified.workspaceId);
+    const shortToken = await exchangeCode(url.origin, code, meta);
+    const ll = await longLivedToken(shortToken, meta).catch(() => ({ token: shortToken, expiresAt: null }));
     const userToken = ll.token;
     const expiresAt = ll.expiresAt;
     const pages = await listPages(userToken);

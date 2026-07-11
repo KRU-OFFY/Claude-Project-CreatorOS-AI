@@ -14,32 +14,51 @@ import crypto from "node:crypto";
 // the render_jobs row (see migration 0017) so a replay outside the ±5min
 // window we tolerate is rejected.
 
-export function renderConfigured(): boolean {
-  return Boolean(process.env.RENDER_WORKER_URL && process.env.RENDER_WORKER_SECRET);
+// Worker URL + HMAC secret may come from env or the in-app settings center
+// (workspace_settings, Track L) — callers that know the workspace pass cfg.
+export interface RenderConfig {
+  url: string;
+  secret: string;
+}
+
+function resolveConfig(cfg?: Partial<RenderConfig> | null): RenderConfig {
+  return {
+    url: cfg?.url || process.env.RENDER_WORKER_URL || "",
+    secret: cfg?.secret || process.env.RENDER_WORKER_SECRET || "",
+  };
+}
+
+export function renderConfigured(cfg?: Partial<RenderConfig> | null): boolean {
+  const c = resolveConfig(cfg);
+  return Boolean(c.url && c.secret);
 }
 
 // Return the shared HMAC secret. **Throws** when unset — falling back to an
 // empty string would let a request signed with the empty key satisfy
 // verifyCallbackAuth (auth bypass). Callers gate on `renderConfigured()`
 // before invoking sign/verify, so throwing here is a defensive backstop.
-function secret(): string {
-  const key = process.env.RENDER_WORKER_SECRET;
+function secret(cfg?: Partial<RenderConfig> | null): string {
+  const key = resolveConfig(cfg).secret;
   if (!key) throw new Error("RENDER_WORKER_SECRET is not configured");
   return key;
 }
 
-function sign(payload: string): string {
-  return crypto.createHmac("sha256", secret()).update(payload).digest("hex");
+function sign(payload: string, cfg?: Partial<RenderConfig> | null): string {
+  return crypto.createHmac("sha256", secret(cfg)).update(payload).digest("hex");
 }
 
 // Constant-time compare so a wrong signature doesn't leak byte offsets
 // through timing. Falsy on length mismatch (safe short-circuit). Also
 // returns false — instead of throwing — when the secret is not configured,
 // so an unconfigured deployment fails closed on any callback.
-export function verifySignature(payload: string, expected: string): boolean {
+export function verifySignature(
+  payload: string,
+  expected: string,
+  cfg?: Partial<RenderConfig> | null
+): boolean {
   let computed: string;
   try {
-    computed = sign(payload);
+    computed = sign(payload, cfg);
   } catch {
     return false;
   }
@@ -75,16 +94,19 @@ export interface EnqueueResult {
 // with 202 (accepted) and hits back via /api/render/callback when the render
 // completes. If the worker is unconfigured we surface a distinct error so
 // callers know to show a "not connected" banner instead of "worker down".
-export async function enqueueRender(job: RenderJobPayload): Promise<EnqueueResult> {
-  if (!renderConfigured()) {
+export async function enqueueRender(
+  job: RenderJobPayload,
+  cfg?: Partial<RenderConfig> | null
+): Promise<EnqueueResult> {
+  if (!renderConfigured(cfg)) {
     return { ok: false, status: 503, error: "render worker not configured" };
   }
   const body = JSON.stringify(job);
-  const signature = sign(body);
-  // Trim any trailing slash so an env value of
-  // "https://render.internal/" doesn't produce "//render" — some strict
-  // reverse proxies 404 on double slashes.
-  const baseUrl = (process.env.RENDER_WORKER_URL ?? "").replace(/\/+$/, "");
+  const signature = sign(body, cfg);
+  // Trim any trailing slash so a value of "https://render.internal/"
+  // doesn't produce "//render" — some strict reverse proxies 404 on
+  // double slashes.
+  const baseUrl = resolveConfig(cfg).url.replace(/\/+$/, "");
   try {
     const res = await fetch(`${baseUrl}/render`, {
       method: "POST",
@@ -120,13 +142,16 @@ export interface CallbackAuth {
   signature: string;
 }
 
-export function verifyCallbackAuth(auth: CallbackAuth): { ok: true } | { ok: false; reason: string } {
+export function verifyCallbackAuth(
+  auth: CallbackAuth,
+  cfg?: Partial<RenderConfig> | null
+): { ok: true } | { ok: false; reason: string } {
   const drift = Math.abs(Date.now() - auth.ts * 1000);
   if (drift > 5 * 60_000) {
     return { ok: false, reason: "timestamp out of window" };
   }
   const payload = `${auth.jobId}.${auth.nonce}.${auth.ts}`;
-  if (!verifySignature(payload, auth.signature)) {
+  if (!verifySignature(payload, auth.signature, cfg)) {
     return { ok: false, reason: "bad signature" };
   }
   return { ok: true };

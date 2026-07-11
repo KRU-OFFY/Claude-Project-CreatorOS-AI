@@ -106,6 +106,25 @@ for (const tokenGrant of tokenGrants) {
   }
 }
 
+// workspace_settings secrets get the same protection: default select revoked
+// and value_encrypted never in a column-scoped grant to authenticated.
+if (
+  discovered.has("workspace_settings") &&
+  !/revoke\s+select\s+on\s+"?workspace_settings"?\s+from\s+anon\s*,\s*authenticated/i.test(sql)
+) {
+  fail("workspace_settings does not revoke SELECT from anon/authenticated");
+}
+const settingGrants = sql.matchAll(
+  /grant\s+select\s*\(([^)]+)\)\s+on\s+"?workspace_settings"?\s+to\s+authenticated/gi
+);
+for (const settingGrant of settingGrants) {
+  if (settingGrant[1].toLowerCase().includes("value_encrypted")) {
+    fail(
+      "workspace_settings grants value_encrypted to authenticated — encrypted settings must stay server-only"
+    );
+  }
+}
+
 if (process.exitCode === 1) {
   console.error("");
   console.error("Fix the migration or (rare) add the table to ALLOWLIST with a comment.");
