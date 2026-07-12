@@ -72,7 +72,7 @@ export default async function AnalyticsPage() {
           <form action={recordMetrics} className="space-y-2">
             <select
               name="platform"
-              className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
             >
               {PLATFORM_KEYS.map((p) => (
                 <option key={p} value={p}>
@@ -93,7 +93,7 @@ export default async function AnalyticsPage() {
                 type="number"
                 step="any"
                 placeholder={l}
-                className="w-full rounded-lg border border-black/15 px-3 py-1.5 text-sm"
+                className="w-full rounded-lg border border-white/15 px-3 py-1.5 text-sm"
               />
             ))}
             <button className="w-full rounded-lg bg-gradient-to-r from-brand to-brand-2 px-3 py-2 text-sm font-semibold text-white">

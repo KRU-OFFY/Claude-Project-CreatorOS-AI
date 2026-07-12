@@ -1,10 +1,14 @@
 @import "tailwindcss";
 
+/* Premium dark theme (MotionSites-inspired): deep background with soft brand
+   glows, near-white foreground, translucent glass surfaces. */
 :root {
-  --background: #f7f8fa;
-  --foreground: #101828;
-  --brand: #6d28d9;
-  --brand-2: #2563eb;
+  --background: #08080c;
+  --foreground: #e9eaf0;
+  --brand: #8b5cf6;
+  --brand-2: #3b82f6;
+  --surface: rgba(255, 255, 255, 0.045);
+  --line: rgba(255, 255, 255, 0.09);
 }
 
 @theme inline {
@@ -12,11 +16,36 @@
   --color-foreground: var(--foreground);
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
+  background-color: var(--background);
+  /* Soft radial brand glows fixed behind the whole app for depth. */
+  background-image:
+    radial-gradient(55rem 55rem at 12% -12%, rgba(139, 92, 246, 0.2), transparent 60%),
+    radial-gradient(48rem 48rem at 105% 0%, rgba(59, 130, 246, 0.16), transparent 55%),
+    radial-gradient(42rem 42rem at 50% 118%, rgba(139, 92, 246, 0.1), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
   font-family: "Segoe UI", "Sarabun", "Noto Sans Thai", system-ui, -apple-system,
     Tahoma, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Consistent, visible focus ring for keyboard users across the dark UI. */
+:where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--brand) 70%, white);
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+/* Gradient brand text helper. */
+.text-gradient {
+  background: linear-gradient(100deg, var(--brand), var(--brand-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }

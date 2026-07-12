@@ -62,7 +62,7 @@ export default async function ContentStudioPage() {
               <select
                 name="campaign_id"
                 required
-                className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
               >
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -73,7 +73,7 @@ export default async function ContentStudioPage() {
               <button className="w-full rounded-lg bg-gradient-to-r from-brand to-brand-2 px-3 py-2 text-sm font-semibold text-white">
                 สร้าง variant ครบทุกแพลตฟอร์มเป้าหมาย
               </button>
-              <p className="text-xs text-black/40">
+              <p className="text-xs text-foreground/40">
                 โหมด AI: {aiMode(cfg?.ai) === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
               </p>
             </form>
@@ -89,20 +89,20 @@ export default async function ContentStudioPage() {
               {variants.map((v) => {
                 const affiliate = affiliateNoteOf(v);
                 return (
-                <div key={v.id} className="rounded-lg border border-black/10 p-3">
+                <div key={v.id} className="rounded-lg border border-white/10 p-3">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-sm font-medium">{platformLabel(v.platform)}</span>
                     <StatusBadge status={v.status} />
                   </div>
-                  <p className="text-sm text-black/70">{v.variant_body}</p>
+                  <p className="text-sm text-foreground/70">{v.variant_body}</p>
                   {(v.hashtags as string[])?.length > 0 && (
                     <p className="mt-1 text-xs text-brand">
                       {(v.hashtags as string[]).map((h) => `#${h}`).join(" ")}
                     </p>
                   )}
-                  {v.cta && <p className="mt-1 text-xs text-black/50">CTA: {v.cta}</p>}
+                  {v.cta && <p className="mt-1 text-xs text-foreground/50">CTA: {v.cta}</p>}
                   {affiliate && (
-                    <p className="mt-1 text-xs text-black/50">
+                    <p className="mt-1 text-xs text-foreground/50">
                       {affiliate.note}{" "}
                       <span className="break-all text-brand">{affiliate.url}</span>
                     </p>
@@ -111,12 +111,12 @@ export default async function ContentStudioPage() {
                     {renderReady ? (
                       <form action={renderVariantMedia}>
                         <input type="hidden" name="variant_id" value={v.id} />
-                        <button className="rounded-lg border border-black/15 px-3 py-1 text-xs hover:bg-black/5">
+                        <button className="rounded-lg border border-white/15 px-3 py-1 text-xs hover:bg-white/5">
                           🎬 สั่ง render วิดีโอ
                         </button>
                       </form>
                     ) : (
-                      <span className="text-xs text-black/40">
+                      <span className="text-xs text-foreground/40">
                         (render worker ยังไม่ตั้งค่า —
                         ตั้ง RENDER_WORKER_URL/RENDER_WORKER_SECRET เพื่อเปิดปุ่มนี้)
                       </span>

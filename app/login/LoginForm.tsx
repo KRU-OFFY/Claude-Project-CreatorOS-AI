@@ -40,25 +40,25 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-black/60">อีเมล</label>
+        <label className="mb-1 block text-xs font-medium text-foreground/60">อีเมล</label>
         <input
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-brand"
+          className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm outline-none focus:border-brand"
           placeholder="you@example.com"
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-black/60">รหัสผ่าน</label>
+        <label className="mb-1 block text-xs font-medium text-foreground/60">รหัสผ่าน</label>
         <input
           type="password"
           required
           minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-black/15 px-3 py-2 text-sm outline-none focus:border-brand"
+          className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm outline-none focus:border-brand"
           placeholder="••••••••"
         />
       </div>
@@ -76,7 +76,7 @@ export function LoginForm() {
           setMode((m) => (m === "login" ? "signup" : "login"));
           setError(null);
         }}
-        className="w-full text-center text-xs text-black/50 hover:text-black/80"
+        className="w-full text-center text-xs text-foreground/50 hover:text-foreground/80"
       >
         {mode === "login" ? "ยังไม่มีบัญชี? สมัครสมาชิก" : "มีบัญชีแล้ว? เข้าสู่ระบบ"}
       </button>
