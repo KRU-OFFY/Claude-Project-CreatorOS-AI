@@ -40,7 +40,7 @@ export default async function PublishCenterPage() {
                       <input
                         type="datetime-local"
                         name="scheduled_at"
-                        className="rounded-lg border border-white/15 px-2 py-1 text-xs"
+                        className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs text-foreground"
                       />
                       <button className="rounded-lg bg-gradient-to-r from-brand to-brand-2 px-3 py-1.5 text-xs font-semibold text-white">
                         {adapter.isConfigured() ? "จัดคิวเผยแพร่" : "จัดคิว (copy-to-post)"}
@@ -105,7 +105,7 @@ export default async function PublishCenterPage() {
                             <input
                               name="published_url"
                               placeholder="ลิงก์โพสต์ (ถ้ามี)"
-                              className="w-28 rounded border border-white/15 px-1.5 py-1 text-xs"
+                              className="w-28 rounded border border-white/15 bg-white/5 px-1.5 py-1 text-xs"
                             />
                             <button className="rounded bg-green-600 px-2 py-1 text-xs text-white">
                               ทำเครื่องหมายว่าโพสต์แล้ว

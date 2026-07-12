@@ -71,7 +71,7 @@ export default async function TeamPage({
                 type="email"
                 required
                 placeholder="teammate@example.com"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm"
               />
             </div>
             <div>
@@ -79,7 +79,7 @@ export default async function TeamPage({
               <select
                 name="role"
                 defaultValue="editor"
-                className="rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="rounded-lg border border-white/15 bg-background px-3 py-2 text-sm text-foreground"
               >
                 {INVITABLE_ROLES.filter((r) => r !== "owner").map((r) => (
                   <option key={r} value={r}>
@@ -136,7 +136,7 @@ export default async function TeamPage({
                             <select
                               name="role"
                               defaultValue={m.role}
-                              className="rounded border border-white/15 px-2 py-1 text-xs"
+                              className="rounded border border-white/15 bg-background px-2 py-1 text-xs text-foreground"
                             >
                               {INVITABLE_ROLES.filter((r) => r !== "owner").map(
                                 (r) => (

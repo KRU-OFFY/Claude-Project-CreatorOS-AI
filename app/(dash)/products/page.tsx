@@ -26,7 +26,7 @@ export default async function ProductsPage() {
                 name="url"
                 type="url"
                 placeholder="https://s.shopee.co.th/xxx"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm outline-none focus:border-brand"
+                className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand"
               />
               <p className="mt-1 text-[11px] text-foreground/40">
                 ระบบจะวางลิงก์ให้อัตโนมัติตอนโพสต์ — Facebook เป็นคอมเมนต์แรก
@@ -39,7 +39,7 @@ export default async function ProductsPage() {
               <label className="mb-1 block text-xs font-medium text-foreground/60">แหล่งที่มา</label>
               <select
                 name="source_platform"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-background px-3 py-2 text-sm text-foreground"
               >
                 <option value="manual">กรอกเอง</option>
                 <option value="shopee">Shopee</option>
@@ -54,7 +54,7 @@ export default async function ProductsPage() {
               <select
                 name="product_category"
                 defaultValue="general"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-background px-3 py-2 text-sm text-foreground"
               >
                 <option value="general">ทั่วไป</option>
                 <option value="health">อาหารเสริม/สุขภาพ (อย.)</option>
@@ -131,7 +131,7 @@ function Field({
         type={type}
         required={required}
         step="any"
-        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm outline-none focus:border-brand"
+        className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand"
       />
     </div>
   );

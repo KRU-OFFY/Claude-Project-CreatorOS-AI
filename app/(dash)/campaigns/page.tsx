@@ -24,14 +24,14 @@ export default async function CampaignsPage() {
               <input
                 name="name"
                 required
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm"
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-foreground/60">สินค้า</label>
               <select
                 name="product_id"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-background px-3 py-2 text-sm text-foreground"
               >
                 <option value="">— เลือกสินค้า —</option>
                 {eligible.map((p) => (
@@ -45,7 +45,7 @@ export default async function CampaignsPage() {
               <label className="mb-1 block text-xs font-medium text-foreground/60">เป้าหมาย</label>
               <select
                 name="goal"
-                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-background px-3 py-2 text-sm text-foreground"
               >
                 <option value="conversion">Conversion (ยอดขาย)</option>
                 <option value="awareness">Awareness (การรับรู้)</option>

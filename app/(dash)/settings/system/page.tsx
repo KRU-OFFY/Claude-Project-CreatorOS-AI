@@ -145,7 +145,7 @@ function SettingRow({
               name="value"
               placeholder={def.secret ? "วางค่าใหม่ (เว้นว่าง = คงเดิม)" : "ค่าใหม่"}
               autoComplete="off"
-              className="w-56 rounded-lg border border-white/15 px-2 py-1 text-sm"
+              className="w-56 rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-sm"
             />
             <button className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
               บันทึก

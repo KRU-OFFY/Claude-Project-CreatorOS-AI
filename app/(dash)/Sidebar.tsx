@@ -63,7 +63,7 @@ export function Sidebar({
                 name="workspace_id"
                 defaultValue={activeWorkspaceId}
                 onChange={(e) => e.currentTarget.form?.requestSubmit()}
-                className="w-full rounded-lg border border-white/15 bg-white/5 px-2 py-1.5 text-sm"
+                className="w-full rounded-lg border border-white/15 bg-background px-2 py-1.5 text-sm text-foreground"
               >
                 {memberships.map((m) => (
                   <option key={m.workspaceId} value={m.workspaceId}>
