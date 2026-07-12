@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
-/* Premium dark theme (MotionSites-inspired): deep background with soft brand
-   glows, near-white foreground, translucent glass surfaces. */
+/* Premium dark theme (MotionSites-inspired): vibrant brand accents on a soft,
+   eye-friendly indigo background — colorful gradients + glass, but a gentle
+   deep-navy base and a comfortable (not glaring) near-white foreground. */
 :root {
-  --background: #08080c;
-  --foreground: #e9eaf0;
-  --brand: #8b5cf6;
-  --brand-2: #3b82f6;
-  --surface: rgba(255, 255, 255, 0.045);
-  --line: rgba(255, 255, 255, 0.09);
+  --background: #0e1022;
+  --foreground: #e8e6f4;
+  --brand: #a855f7;
+  --brand-2: #22d3ee;
+  --surface: rgba(255, 255, 255, 0.05);
+  --line: rgba(255, 255, 255, 0.1);
 }
 
 @theme inline {
@@ -23,11 +24,12 @@
 body {
   color: var(--foreground);
   background-color: var(--background);
-  /* Soft radial brand glows fixed behind the whole app for depth. */
+  /* Vibrant radial brand glows fixed behind the whole app — purple + cyan with
+     a soft pink accent — kept at moderate opacity so it reads colorful yet gentle. */
   background-image:
-    radial-gradient(55rem 55rem at 12% -12%, rgba(139, 92, 246, 0.2), transparent 60%),
-    radial-gradient(48rem 48rem at 105% 0%, rgba(59, 130, 246, 0.16), transparent 55%),
-    radial-gradient(42rem 42rem at 50% 118%, rgba(139, 92, 246, 0.1), transparent 60%);
+    radial-gradient(55rem 55rem at 12% -12%, rgba(168, 85, 247, 0.22), transparent 60%),
+    radial-gradient(48rem 48rem at 105% 0%, rgba(34, 211, 238, 0.18), transparent 55%),
+    radial-gradient(42rem 42rem at 50% 120%, rgba(236, 72, 153, 0.12), transparent 60%);
   background-attachment: fixed;
   min-height: 100vh;
   font-family: "Segoe UI", "Sarabun", "Noto Sans Thai", system-ui, -apple-system,
