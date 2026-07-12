@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/env";
+import { LogoMark } from "@/components/Logo";
 import { LoginForm } from "./LoginForm";
 
 export default function LoginPage() {
@@ -8,9 +9,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-xl font-bold text-white shadow-[0_12px_32px_-8px_rgba(139,92,246,0.75)]">
-            C
-          </div>
+          <LogoMark className="mx-auto mb-3 h-16 w-16 text-foreground" />
           <h1 className="text-2xl font-bold tracking-tight text-gradient">CreatorOS AI</h1>
           <p className="text-sm text-foreground/50">One AI. Every Platform.</p>
         </div>
