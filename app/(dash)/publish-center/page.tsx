@@ -29,18 +29,18 @@ export default async function PublishCenterPage() {
                 return (
                   <div
                     key={v.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-black/10 p-3"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 p-3"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{platformLabel(v.platform)}</p>
-                      <p className="truncate text-xs text-black/50">{v.variant_body}</p>
+                      <p className="truncate text-xs text-foreground/50">{v.variant_body}</p>
                     </div>
                     <form action={enqueueVariant} className="flex items-center gap-2">
                       <input type="hidden" name="variant_id" value={v.id} />
                       <input
                         type="datetime-local"
                         name="scheduled_at"
-                        className="rounded-lg border border-black/15 px-2 py-1 text-xs"
+                        className="rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-xs text-foreground"
                       />
                       <button className="rounded-lg bg-gradient-to-r from-brand to-brand-2 px-3 py-1.5 text-xs font-semibold text-white">
                         {adapter.isConfigured() ? "จัดคิวเผยแพร่" : "จัดคิว (copy-to-post)"}
@@ -105,7 +105,7 @@ export default async function PublishCenterPage() {
                             <input
                               name="published_url"
                               placeholder="ลิงก์โพสต์ (ถ้ามี)"
-                              className="w-28 rounded border border-black/15 px-1.5 py-1 text-xs"
+                              className="w-28 rounded border border-white/15 bg-white/5 px-1.5 py-1 text-xs"
                             />
                             <button className="rounded bg-green-600 px-2 py-1 text-xs text-white">
                               ทำเครื่องหมายว่าโพสต์แล้ว
@@ -117,7 +117,7 @@ export default async function PublishCenterPage() {
                           j.status === "publishing") && (
                           <form action={retryJob}>
                             <input type="hidden" name="job_id" value={j.id} />
-                            <button className="rounded border border-black/15 px-2 py-1 text-xs">
+                            <button className="rounded border border-white/15 px-2 py-1 text-xs">
                               {j.status === "publishing" ? "รีเซ็ต (ค้าง)" : "retry"}
                             </button>
                           </form>

@@ -83,7 +83,7 @@ export default async function SettingsPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">เชื่อมบัญชี Meta (Facebook / Instagram)</h2>
-              <p className="mt-1 text-xs text-black/50">
+              <p className="mt-1 text-xs text-foreground/50">
                 เชื่อมเพจเพื่อโพสต์จริงผ่าน Graph API — token จะถูกเข้ารหัสและเก็บฝั่ง server
                 {byPlatform.get("facebook")?.status === "connected" && (
                   <span className="ml-1 text-green-600">
@@ -109,7 +109,7 @@ export default async function SettingsPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">เชื่อมบัญชี TikTok</h2>
-              <p className="mt-1 text-xs text-black/50">
+              <p className="mt-1 text-xs text-foreground/50">
                 เชื่อมบัญชีเพื่อโพสต์วิดีโอผ่าน Content Posting API — token เข้ารหัสฝั่ง server
                 {byPlatform.get("tiktok")?.status === "connected" && (
                   <span className="ml-1 text-green-600">
@@ -135,7 +135,7 @@ export default async function SettingsPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold">เชื่อมช่อง YouTube</h2>
-              <p className="mt-1 text-xs text-black/50">
+              <p className="mt-1 text-xs text-foreground/50">
                 เชื่อมช่องเพื่ออัปโหลดวิดีโอผ่าน YouTube Data API v3 — token เข้ารหัสฝั่ง server
                 {byPlatform.get("youtube")?.status === "connected" && (
                   <span className="ml-1 text-green-600">
@@ -143,7 +143,7 @@ export default async function SettingsPage({
                   </span>
                 )}
               </p>
-              <p className="mt-1 text-[11px] text-black/40">
+              <p className="mt-1 text-[11px] text-foreground/40">
                 Privacy เริ่มต้น: private (ตั้ง YOUTUBE_DEFAULT_PRIVACY เป็น unlisted/public เมื่อพร้อม)
               </p>
             </div>
@@ -167,7 +167,7 @@ export default async function SettingsPage({
             <Row label="อีเมล" value={ctx?.email || "—"} />
             <Row label="บทบาทของคุณ" value={ctx?.role || "—"} />
           </dl>
-          <div className="mt-4 rounded-lg bg-black/5 p-3 text-xs text-black/60">
+          <div className="mt-4 rounded-lg bg-white/5 p-3 text-xs text-foreground/60">
             บทบาท: owner (จัดการทั้งหมด) · editor (สร้าง/แก้) · approver (อนุมัติ compliance) ·
             viewer (ดูอย่างเดียว)
           </div>
@@ -195,7 +195,7 @@ export default async function SettingsPage({
                         <StatusBadge status={conn?.status ?? "disconnected"} />
                       </Td>
                       <Td>
-                        <span className="text-xs text-black/50">
+                        <span className="text-xs text-foreground/50">
                           {adapter.isConfigured() ? "พร้อมใช้" : "ยังไม่ตั้งค่า"}
                         </span>
                       </Td>
@@ -205,7 +205,7 @@ export default async function SettingsPage({
               </tbody>
             </table>
           </div>
-          <p className="mt-3 text-xs text-black/40">
+          <p className="mt-3 text-xs text-foreground/40">
             การเชื่อมบัญชีจริงต้องใช้ OAuth ของแต่ละแพลตฟอร์ม — token จะถูกเข้ารหัสและเก็บฝั่ง
             server เท่านั้น (ไม่ส่งกลับ client)
           </p>
@@ -218,7 +218,7 @@ export default async function SettingsPage({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <dt className="text-black/50">{label}</dt>
+      <dt className="text-foreground/50">{label}</dt>
       <dd className="font-medium">{value}</dd>
     </div>
   );

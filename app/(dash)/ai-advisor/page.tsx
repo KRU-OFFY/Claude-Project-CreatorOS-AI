@@ -82,7 +82,7 @@ export default async function AiAdvisorPage() {
         subtitle="AI วิเคราะห์ผลรอบที่ผ่านมา แล้วแนะนำสินค้า/เวลาโพสต์/รูปแบบคอนเทนต์/แพลตฟอร์มรอบถัดไป"
       />
 
-      <p className="mb-3 text-xs text-black/40">
+      <p className="mb-3 text-xs text-foreground/40">
         โหมด AI: {aiMode(aiCfg) === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
         {" · "}วิเคราะห์จากข้อมูล {TREND_WINDOW} วันล่าสุด
       </p>
@@ -116,7 +116,7 @@ export default async function AiAdvisorPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-black/50">
+                <tr className="text-left text-foreground/50">
                   <th className="pb-1">วันที่</th>
                   <th className="pb-1">คาดการณ์ (฿)</th>
                   <th className="pb-1">ช่วงล่าง</th>
@@ -125,17 +125,17 @@ export default async function AiAdvisorPage() {
               </thead>
               <tbody>
                 {forecast.map((f) => (
-                  <tr key={f.date} className="border-t border-black/5">
+                  <tr key={f.date} className="border-t border-white/5">
                     <td className="py-1">{f.date}</td>
                     <td className="py-1 font-medium">{f.revenue.toLocaleString()}</td>
-                    <td className="py-1 text-black/50">{f.lower.toLocaleString()}</td>
-                    <td className="py-1 text-black/50">{f.upper.toLocaleString()}</td>
+                    <td className="py-1 text-foreground/50">{f.lower.toLocaleString()}</td>
+                    <td className="py-1 text-foreground/50">{f.upper.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[11px] text-black/40">
+          <p className="mt-2 text-[11px] text-foreground/40">
             คาดการณ์ด้วย OLS linear regression + ±1σ band บนข้อมูล {TREND_WINDOW} วันล่าสุด
           </p>
         </Card>
@@ -149,9 +149,9 @@ export default async function AiAdvisorPage() {
             <Card key={i} className={`border-l-4 ${priorityColor[r.priority] ?? ""}`}>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">{r.topic}</span>
-                <span className="text-xs uppercase text-black/40">{r.priority}</span>
+                <span className="text-xs uppercase text-foreground/40">{r.priority}</span>
               </div>
-              <p className="mt-1 text-sm text-black/70">{r.recommendation}</p>
+              <p className="mt-1 text-sm text-foreground/70">{r.recommendation}</p>
             </Card>
           ))}
         </div>
@@ -178,10 +178,10 @@ function Stat({
         ? "text-green-600"
         : delta < 0
           ? "text-red-600"
-          : "text-black/40";
+          : "text-foreground/40";
   return (
     <Card>
-      <p className="text-[11px] text-black/50">{label}</p>
+      <p className="text-[11px] text-foreground/50">{label}</p>
       <p className="mt-1 text-lg font-semibold">{value}</p>
       {delta !== undefined && (
         <p className={`text-xs ${deltaColor}`}>
@@ -189,7 +189,7 @@ function Stat({
           {delta}% เทียบครึ่งแรก
         </p>
       )}
-      {hint && <p className="text-[11px] text-black/40">{hint}</p>}
+      {hint && <p className="text-[11px] text-foreground/40">{hint}</p>}
     </Card>
   );
 }

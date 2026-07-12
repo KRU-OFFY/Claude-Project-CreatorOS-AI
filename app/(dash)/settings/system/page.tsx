@@ -16,7 +16,7 @@ import { saveSystemSetting, clearSystemSetting, toggleWorkflow } from "../../act
 const ORIGIN_LABEL: Record<string, { text: string; cls: string }> = {
   db: { text: "ตั้งในแอป", cls: "bg-emerald-100 text-emerald-700" },
   env: { text: "จาก env", cls: "bg-sky-100 text-sky-700" },
-  default: { text: "ค่าเริ่มต้น", cls: "bg-black/5 text-black/50" },
+  default: { text: "ค่าเริ่มต้น", cls: "bg-white/5 text-foreground/50" },
   missing: { text: "ยังไม่ตั้ง", cls: "bg-amber-100 text-amber-700" },
 };
 
@@ -127,11 +127,11 @@ function SettingRow({
 }) {
   const display = def.secret ? maskSecret(resolved.value) : (resolved.value ?? "");
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-black/5 py-2 last:border-0">
+    <div className="flex flex-wrap items-center gap-2 border-b border-white/5 py-2 last:border-0">
       <div className="min-w-48 flex-1">
         <div className="text-sm font-medium">{def.label}</div>
-        <div className="flex items-center gap-2 text-xs text-black/50">
-          <code className="rounded bg-black/5 px-1">{def.key}</code>
+        <div className="flex items-center gap-2 text-xs text-foreground/50">
+          <code className="rounded bg-white/5 px-1">{def.key}</code>
           <OriginBadge origin={resolved.origin} />
           {display ? <span className="font-mono">{display}</span> : null}
         </div>
@@ -145,7 +145,7 @@ function SettingRow({
               name="value"
               placeholder={def.secret ? "วางค่าใหม่ (เว้นว่าง = คงเดิม)" : "ค่าใหม่"}
               autoComplete="off"
-              className="w-56 rounded-lg border border-black/15 px-2 py-1 text-sm"
+              className="w-56 rounded-lg border border-white/15 bg-white/5 px-2 py-1 text-sm"
             />
             <button className="rounded-lg bg-black px-3 py-1 text-sm font-medium text-white">
               บันทึก
@@ -154,7 +154,7 @@ function SettingRow({
           {resolved.origin === "db" ? (
             <form action={clearSystemSetting}>
               <input type="hidden" name="key" value={def.key} />
-              <button className="rounded-lg border border-black/15 px-2 py-1 text-xs text-black/60">
+              <button className="rounded-lg border border-white/15 px-2 py-1 text-xs text-foreground/60">
                 ล้างค่า
               </button>
             </form>
@@ -182,7 +182,7 @@ function GroupCard({
   return (
     <Card>
       <h2 className="mb-1 font-semibold">{spec.title}</h2>
-      <p className="mb-2 text-xs text-black/50">{spec.guide.intro}</p>
+      <p className="mb-2 text-xs text-foreground/50">{spec.guide.intro}</p>
       {defs.map((def) => (
         <SettingRow
           key={def.key}
@@ -191,7 +191,7 @@ function GroupCard({
           isOwner={isOwner}
         />
       ))}
-      <details className="mt-2 text-xs text-black/60">
+      <details className="mt-2 text-xs text-foreground/60">
         <summary className="cursor-pointer font-medium">📖 คำแนะนำตั้งค่า</summary>
         <ol className="mt-1 list-decimal space-y-1 pl-5">
           {spec.guide.steps.map((st) => (
@@ -201,7 +201,7 @@ function GroupCard({
         {spec.guide.redirectUri ? (
           <p className="mt-1">
             Redirect URI:{" "}
-            <code className="rounded bg-black/5 px-1">
+            <code className="rounded bg-white/5 px-1">
               {appUrl}
               {spec.guide.redirectUri}
             </code>
@@ -250,7 +250,7 @@ export default async function SystemSettingsPage() {
       {/* ===== workflows ===== */}
       <Card className="mb-4">
         <h2 className="mb-1 font-semibold">⚙️ เปิด/ปิด Workflows</h2>
-        <p className="mb-2 text-xs text-black/50">
+        <p className="mb-2 text-xs text-foreground/50">
           มีผลเฉพาะ workspace นี้ — งานที่ถูกปิดจะถูกข้าม (คิวไม่หาย กลับมาทำงานเมื่อเปิดใหม่)
         </p>
         {WORKFLOW_KEYS.map((key) => {
@@ -261,11 +261,11 @@ export default async function SystemSettingsPage() {
           return (
             <div
               key={key}
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-black/5 py-2 last:border-0"
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 py-2 last:border-0"
             >
               <div>
                 <div className="text-sm font-medium">{def.label}</div>
-                <code className="text-xs text-black/40">{key}</code>
+                <code className="text-xs text-foreground/40">{key}</code>
               </div>
               <div className="flex items-center gap-2">
                 <span
@@ -279,7 +279,7 @@ export default async function SystemSettingsPage() {
                   <form action={toggleWorkflow}>
                     <input type="hidden" name="key" value={key} />
                     <input type="hidden" name="enabled" value={enabled ? "false" : "true"} />
-                    <button className="rounded-lg border border-black/15 px-3 py-1 text-xs font-medium">
+                    <button className="rounded-lg border border-white/15 px-3 py-1 text-xs font-medium">
                       {enabled ? "ปิด" : "เปิด"}
                     </button>
                   </form>
@@ -305,14 +305,14 @@ export default async function SystemSettingsPage() {
       {/* ===== bootstrap (read-only) ===== */}
       <Card className="mt-4">
         <h2 className="mb-1 font-semibold">🔐 ตั้งค่าที่แก้ในแอปไม่ได้ (bootstrap)</h2>
-        <p className="mb-2 text-xs text-black/50">
+        <p className="mb-2 text-xs text-foreground/50">
           ค่าเหล่านี้แอปต้องใช้ก่อนจะอ่านฐานข้อมูลได้ จึงตั้งได้ที่ Vercel → Settings →
           Environment Variables เท่านั้น (ดูขั้นตอนละเอียดใน docs/deploy.md และ env.example)
         </p>
         {bootstrap.map((b) => (
           <div
             key={b.label}
-            className="flex items-center justify-between border-b border-black/5 py-2 text-sm last:border-0"
+            className="flex items-center justify-between border-b border-white/5 py-2 text-sm last:border-0"
           >
             <code className="text-xs">{b.label}</code>
             <span
@@ -324,8 +324,8 @@ export default async function SystemSettingsPage() {
             </span>
           </div>
         ))}
-        <p className="mt-2 text-xs text-black/40">
-          สร้าง secret ด้วย <code className="rounded bg-black/5 px-1">openssl rand -hex 32</code>{" "}
+        <p className="mt-2 text-xs text-foreground/40">
+          สร้าง secret ด้วย <code className="rounded bg-white/5 px-1">openssl rand -hex 32</code>{" "}
           — เปลี่ยน TOKEN_ENCRYPTION_KEY จะทำให้ token/secret เดิมถอดรหัสไม่ได้
         </p>
       </Card>

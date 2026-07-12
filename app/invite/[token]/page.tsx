@@ -27,14 +27,14 @@ export default async function AcceptInvitePage({
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
-      <div className="w-full max-w-md rounded-xl border border-black/10 bg-white p-6 shadow-sm">
+      <div className="w-full max-w-md rounded-xl border border-white/10 bg-white/5 p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-brand to-brand-2 text-sm font-bold text-white">
             C
           </div>
           <div>
             <h1 className="text-lg font-bold">คำเชิญเข้าร่วมทีม</h1>
-            <p className="text-xs text-black/50">CreatorOS AI</p>
+            <p className="text-xs text-foreground/50">CreatorOS AI</p>
           </div>
         </div>
 
@@ -74,7 +74,7 @@ function NotSignedIn({ email }: { email: string }) {
         คุณได้รับเชิญเข้าร่วมทีมด้วยอีเมล{" "}
         <span className="font-semibold">{email}</span>
       </p>
-      <p className="mt-2 text-xs text-black/60">
+      <p className="mt-2 text-xs text-foreground/60">
         กรุณาเข้าสู่ระบบด้วยอีเมลนี้เพื่อยอมรับคำเชิญ
       </p>
       <Link
@@ -93,11 +93,11 @@ function WrongEmail({ expected, actual }: { expected: string; actual: string }) 
       <p className="text-sm text-red-600">
         คำเชิญนี้ออกให้กับ <b>{expected}</b> แต่คุณเข้าสู่ระบบด้วย <b>{actual}</b>
       </p>
-      <p className="mt-2 text-xs text-black/60">
+      <p className="mt-2 text-xs text-foreground/60">
         กรุณาออกจากระบบแล้วเข้าสู่ระบบด้วยอีเมลที่ถูกเชิญ
       </p>
       <form action="/api/auth/signout" method="post" className="mt-4">
-        <button className="rounded-lg border border-black/15 px-4 py-2 text-sm hover:bg-black/5">
+        <button className="rounded-lg border border-white/15 px-4 py-2 text-sm hover:bg-white/5">
           ออกจากระบบ
         </button>
       </form>
@@ -118,7 +118,7 @@ function ReadyToAccept({
     <div>
       <p className="text-sm">
         คุณ (<b>{email}</b>) ได้รับเชิญให้เข้าร่วมในบทบาท{" "}
-        <span className="rounded bg-black/5 px-1.5 py-0.5 text-xs font-semibold">
+        <span className="rounded bg-white/5 px-1.5 py-0.5 text-xs font-semibold">
           {role}
         </span>
       </p>

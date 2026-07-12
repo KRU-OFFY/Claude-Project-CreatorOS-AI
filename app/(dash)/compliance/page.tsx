@@ -40,7 +40,7 @@ export default async function CompliancePage() {
                     <span className="text-sm font-medium">{platformLabel(v.platform)}</span>
                     <StatusBadge status={v.status} />
                     {latest && (
-                      <span className="text-xs text-black/40">
+                      <span className="text-xs text-foreground/40">
                         ความเสี่ยง: {latest.claim_risk_score}/100
                       </span>
                     )}
@@ -49,7 +49,7 @@ export default async function CompliancePage() {
                     {(v.status === "fail" || v.status === "needs_review") && (
                       <form action={rewriteVariant}>
                         <input type="hidden" name="variant_id" value={v.id} />
-                        <button className="rounded-lg border border-black/15 px-3 py-1.5 text-xs hover:bg-black/5">
+                        <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs hover:bg-white/5">
                           🤖 AI แก้ให้ผ่าน
                         </button>
                       </form>
@@ -63,13 +63,13 @@ export default async function CompliancePage() {
                       </form>
                     )}
                     {v.status !== "fail" && v.status !== "approved" && !mayApprove && (
-                      <span className="text-xs text-black/40">
+                      <span className="text-xs text-foreground/40">
                         ต้องให้ owner/approver อนุมัติ
                       </span>
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-black/70">{v.variant_body}</p>
+                <p className="text-sm text-foreground/70">{v.variant_body}</p>
                 {issues.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {issues.map((iss, i) => (

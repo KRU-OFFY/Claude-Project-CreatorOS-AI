@@ -68,7 +68,7 @@ export default async function DashboardPage() {
 
         <Card>
           <h2 className="mb-3 font-semibold">เริ่มเวิร์กโฟลว์</h2>
-          <p className="mb-3 text-sm text-black/60">
+          <p className="mb-3 text-sm text-foreground/60">
             สินค้า → แคมเปญ → คอนเทนต์ → Compliance → เผยแพร่ → วิเคราะห์ผล
           </p>
           <div className="flex flex-wrap gap-2">
@@ -80,12 +80,12 @@ export default async function DashboardPage() {
             </Link>
             <Link
               href="/ai-advisor"
-              className="rounded-lg border border-black/10 px-4 py-2 text-sm"
+              className="rounded-lg border border-white/10 px-4 py-2 text-sm"
             >
               ดูคำแนะนำ AI
             </Link>
           </div>
-          <p className="mt-3 text-xs text-black/40">
+          <p className="mt-3 text-xs text-foreground/40">
             โหมด AI: {aiMode() === "anthropic" ? "Anthropic (Claude)" : "Rule-based (demo)"}
           </p>
         </Card>
@@ -102,9 +102,9 @@ export default async function DashboardPage() {
                 <li key={i} className="flex items-center justify-between">
                   <span>
                     <StatusBadge status={a.action.split(".")[0]} />{" "}
-                    <span className="text-black/70">{a.action}</span>
+                    <span className="text-foreground/70">{a.action}</span>
                   </span>
-                  <span className="text-xs text-black/40">
+                  <span className="text-xs text-foreground/40">
                     {new Date(a.created_at as string).toLocaleString("th-TH")}
                   </span>
                 </li>
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
 function TaskRow({ label, count, href }: { label: string; count: number; href: string }) {
   return (
     <li className="flex items-center justify-between">
-      <Link href={href} className="text-black/70 hover:text-brand">
+      <Link href={href} className="text-foreground/70 hover:text-brand">
         {label}
       </Link>
       <span

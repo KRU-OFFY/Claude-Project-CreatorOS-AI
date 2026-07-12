@@ -38,13 +38,13 @@ export default async function RevenueForecastPage() {
           <h2 className="font-semibold">ความคืบหน้าสู่เป้าหมาย</h2>
           <span className="text-sm font-semibold text-brand">{pct}%</span>
         </div>
-        <div className="h-3 w-full overflow-hidden rounded-full bg-black/10">
+        <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full bg-gradient-to-r from-brand to-brand-2"
             style={{ width: `${pct}%` }}
           />
         </div>
-        <p className="mt-3 text-sm text-black/70">
+        <p className="mt-3 text-sm text-foreground/70">
           {gap > 0 ? (
             <>
               ยังต้องเพิ่มอีก{" "}
@@ -55,7 +55,7 @@ export default async function RevenueForecastPage() {
             <span className="font-semibold text-green-600">คาดว่าจะถึงเป้าหมายแล้ว 🎉</span>
           )}
         </p>
-        <p className="mt-2 text-xs text-black/40">
+        <p className="mt-2 text-xs text-foreground/40">
           ประมาณการเบื้องต้นจาก run-rate เชิงเส้น — ดูคำแนะนำเพิ่มเติมได้ที่ AI Advisor
         </p>
       </Card>
