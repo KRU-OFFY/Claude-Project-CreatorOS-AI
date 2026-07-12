@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
+import { LogoMark } from "@/components/Logo";
 import { switchWorkspace } from "./actions";
 
 const groups = ["ภาพรวม", "เวิร์กโฟลว์", "ผลลัพธ์", "ระบบ"];
@@ -90,7 +91,7 @@ export function Sidebar({
                     onClick={() => setOpen(false)}
                     className={`mb-0.5 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition ${
                       active
-                        ? "border border-white/10 bg-gradient-to-r from-brand/25 to-brand-2/15 font-semibold text-foreground shadow-[0_8px_24px_-12px_rgba(139,92,246,0.6)]"
+                        ? "border border-white/10 bg-gradient-to-r from-brand/25 to-brand-2/15 font-semibold text-foreground shadow-[0_8px_24px_-12px_rgba(37,99,235,0.55)]"
                         : "border border-transparent text-foreground/65 hover:bg-white/5 hover:text-foreground"
                     }`}
                   >
@@ -123,9 +124,7 @@ export function Sidebar({
 function Brand() {
   return (
     <div className="flex items-center gap-2">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand to-brand-2 text-sm font-bold text-white shadow-[0_8px_20px_-6px_rgba(139,92,246,0.7)]">
-        C
-      </div>
+      <LogoMark className="h-9 w-9 text-foreground" />
       <div className="leading-tight">
         <p className="text-sm font-bold">CreatorOS AI</p>
         <p className="text-[10px] text-foreground/45">One AI. Every Platform.</p>

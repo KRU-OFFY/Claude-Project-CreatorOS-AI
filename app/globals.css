@@ -1,15 +1,16 @@
 @import "tailwindcss";
 
-/* Premium dark theme (MotionSites-inspired): vibrant brand accents on a soft,
-   eye-friendly indigo background — colorful gradients + glass, but a gentle
-   deep-navy base and a comfortable (not glaring) near-white foreground. */
+/* CreatorOS AI — official brand theme. Deep-navy ground with the Electric
+   Blue → AI Purple brand gradient, Success Green accent, and a soft slate
+   foreground. Professional, modern, AI-first. (see BRAND_DIRECTION) */
 :root {
-  --background: #0e1022;
-  --foreground: #e8e6f4;
-  --brand: #a855f7;
-  --brand-2: #22d3ee;
-  --surface: rgba(255, 255, 255, 0.05);
-  --line: rgba(255, 255, 255, 0.1);
+  --background: #0f172a; /* Deep Navy */
+  --foreground: #e2e8f0; /* soft slate on navy */
+  --brand: #2563eb; /* Electric Blue */
+  --brand-2: #7c3aed; /* AI Purple */
+  --success: #10b981; /* Success Green */
+  --surface: rgba(255, 255, 255, 0.045);
+  --line: rgba(255, 255, 255, 0.09);
 }
 
 @theme inline {
@@ -17,6 +18,7 @@
   --color-foreground: var(--foreground);
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
+  --color-success: var(--success);
   --color-surface: var(--surface);
   --color-line: var(--line);
 }
@@ -24,12 +26,12 @@
 body {
   color: var(--foreground);
   background-color: var(--background);
-  /* Vibrant radial brand glows fixed behind the whole app — purple + cyan with
-     a soft pink accent — kept at moderate opacity so it reads colorful yet gentle. */
+  /* Brand glows fixed behind the whole app — Electric Blue + AI Purple at
+     moderate opacity over the navy ground for depth without noise. */
   background-image:
-    radial-gradient(55rem 55rem at 12% -12%, rgba(168, 85, 247, 0.22), transparent 60%),
-    radial-gradient(48rem 48rem at 105% 0%, rgba(34, 211, 238, 0.18), transparent 55%),
-    radial-gradient(42rem 42rem at 50% 120%, rgba(236, 72, 153, 0.12), transparent 60%);
+    radial-gradient(55rem 55rem at 12% -12%, rgba(37, 99, 235, 0.22), transparent 60%),
+    radial-gradient(48rem 48rem at 105% 0%, rgba(124, 58, 237, 0.2), transparent 55%),
+    radial-gradient(42rem 42rem at 50% 120%, rgba(37, 99, 235, 0.1), transparent 60%);
   background-attachment: fixed;
   min-height: 100vh;
   font-family: "Segoe UI", "Sarabun", "Noto Sans Thai", system-ui, -apple-system,
