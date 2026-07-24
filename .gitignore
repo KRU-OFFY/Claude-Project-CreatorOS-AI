@@ -38,6 +38,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude Code — personal overrides only; committed config lives in .claude/settings.json
+.claude/settings.local.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
