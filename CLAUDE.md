@@ -57,6 +57,16 @@ affiliate growth OS. Spec lives in `docs/spec/` (7 files) + the Pre-Build Audit 
   migrations) · `npm run build` · `npm run dev`
 - Smoke: `npm run start &` then `BASE_URL=http://localhost:3000 node scripts/smoke.mjs`
 
+## Claude Code config (`.claude/`)
+Team-shared config lives in `.claude/settings.json` (committed). It:
+- Auto-approves safe read-only commands (`npm run typecheck|lint|test|build|check:rls`, `git status|diff|log|show|fetch origin`) so common workflows don't prompt.
+- Denies destructive operations (`git push origin main|master`, force-push, `rm -rf /|~`, reads of `.env*` / `*.pem` / `*.key`).
+- Runs two hooks (scripts in `.claude/hooks/`, POSIX sh + optional `jq`):
+  - `guard-git-push.sh` (PreToolUse Bash) — blocks direct push to `main`/`master` and any `--force`/`-f` push. Exit 2 aborts the tool call.
+  - `post-edit-check.sh` (PostToolUse Edit|Write|MultiEdit) — non-blocking reminders after edits: touch a `.ts`/`.tsx` → nudge `npm run typecheck`; touch a migration → nudge `npm run check:rls`; touch `env.example` / `package.json` → nudge doc/lockfile sync.
+
+Personal overrides go in `.claude/settings.local.json` (gitignored).
+
 ## Automation (cron)
 - `/api/cron/{publish,ingest,refresh-tokens}` — protected by `CRON_SECRET` (`authorizeCron` in `lib/cron.ts`); scheduled in `vercel.json`.
 - Publish core is shared: `lib/publish.ts::executePublish` is called by both the `publishNow` action and the publish cron. Cron uses the service-role admin client and scopes by `job.workspace_id`.
